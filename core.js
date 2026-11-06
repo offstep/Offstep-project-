@@ -64,19 +64,20 @@ const NAV = [
 ];
 const GROUP = { produit: 'catalogue', livraison: 'panier', paiement: 'panier', confirmation: 'commandes', commande: 'commandes', formule: 'compte' };
 
+export const NAVCONF = { home: 'catalogue', items: NAV, group: GROUP, badge: (k) => (k === 'panier' ? cartCount(S.cart) : 0) };
+
 export function renderNav(name) {
   const nav = document.getElementById('nav');
   if (!nav) return;
-  const active = GROUP[name] || name;
-  const n = cartCount(S.cart);
+  const active = NAVCONF.group[name] || name;
   nav.hidden = false;
-  nav.innerHTML = NAV.map(([k, l, p]) => `<a href="#/${k}" class="${k === active ? 'on' : ''}"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>${l}${k === 'panier' && n ? `<span class="badge">${n}</span>` : ''}</a>`).join('');
+  nav.innerHTML = NAVCONF.items.map(([k, l, p]) => { const n = NAVCONF.badge(k); return `<a href="#/${k}" class="${k === active ? 'on' : ''}"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>${l}${n ? `<span class="badge">${n}</span>` : ''}</a>`; }).join('');
 }
 
 export async function render(keepScroll = false) {
-  const raw = location.hash.replace(/^#/, '') || '/catalogue';
+  const raw = location.hash.replace(/^#/, '') || '/' + NAVCONF.home;
   const [name, ...args] = raw.split('/').filter(Boolean);
-  const fn = routes[name] || routes.catalogue;
+  const fn = routes[name] || routes[NAVCONF.home];
   const y = window.scrollY;
   try {
     view().innerHTML = await fn(...args.map(decodeURIComponent));
@@ -106,11 +107,11 @@ document.addEventListener('click', async (e) => {
 document.addEventListener('input', (e) => {
   const el = e.target;
   if (el.dataset && el.dataset.bind) { setPath(S, el.dataset.bind, el.value); persist(); }
-  if (el.dataset && el.dataset.inputAct && handlers[el.dataset.inputAct]) handlers[el.dataset.inputAct](el, e);
+  if (el.dataset && el.dataset.inputAct && handlers[el.dataset.inputAct]) Promise.resolve(handlers[el.dataset.inputAct](el, e)).catch((err) => toast(friendlyError(err.message || String(err))));
 });
 document.addEventListener('change', (e) => {
   const el = e.target;
-  if (el.dataset && el.dataset.changeAct && handlers[el.dataset.changeAct]) handlers[el.dataset.changeAct](el, e);
+  if (el.dataset && el.dataset.changeAct && handlers[el.dataset.changeAct]) Promise.resolve(handlers[el.dataset.changeAct](el, e)).catch((err) => toast(friendlyError(err.message || String(err))));
 });
 window.addEventListener('hashchange', () => render());
 
