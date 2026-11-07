@@ -1,6 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
-import { esc, cartCount, friendlyError, planActive } from './lib.js';
+import { esc, cartCount, friendlyError, planActive, colorCss } from './lib.js';
 
 export const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { flowType: 'pkce', persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
@@ -140,5 +140,5 @@ export function stepper(actDec, actInc, qty, data = '') {
 }
 
 export const COLORMAP = { noir: '#0A0C14', blanc: '#FFFFFF', marron: '#7A5230', rouge: '#C0392B', bleu: '#1F4E9C', beige: '#D9C7A3', gris: '#9AA0AE', vert: '#2E7D32', jaune: '#F2C200', rose: '#E88DB4', orange: '#E67E22' };
-export const hex = (name) => COLORMAP[String(name || '').toLowerCase()] || '#C9CDD6';
+export const hex = (name) => colorCss(name, S.colorHex || {});
 export const fmtPhone = (p) => String(p || '').replace(/\D/g, '').replace(/(\d{2})(?=\d)/g, '$1 ').trim();

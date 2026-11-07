@@ -1,5 +1,6 @@
-import { sb, S, routes, handlers, go, render, toast, once, copyText } from './core.js';
-import { esc, fcfa, label, fmtDate } from './lib.js';
+import { sb, S, routes, handlers, go, render, toast, once, copyText, NAVCONF, hex } from './core.js';
+import { esc, fcfa, label, fmtDate, parseStockBlock } from './lib.js';
+NAVCONF.group.import = 'plus';
 
 const must = (r) => { if (r.error) throw r.error; return r.data; };
 const tag = (kind, v) => `<span class="tag ${['paye', 'livree', 'terminee', 'confirmee'].includes(v) ? 'dark' : ''}">${esc(label(kind, v))}</span>`;
@@ -201,7 +202,7 @@ routes.produits = async () => {
   const ms = must(await sb.from('models').select('*').order('name'));
   return `<div class="pad">${back('plus')}${title('Produits et<br>variantes', 'Ce que voient les revendeurs')}
     <div class="stack" style="margin-top:16px">${ms.map((m) => `<a class="glass" style="padding:16px;display:block" href="#/produit/${m.id}"><div class="row"><b>${esc(m.name)}</b><span class="tag ${m.published ? 'dark' : ''}">${m.published ? 'Publié' : 'Masqué'}</span></div><div style="font-size:13px;color:#667085;margin-top:4px">Réf. ${esc(m.ref || '—')} · ${fcfa(m.price_fcfa)}</div></a>`).join('') || '<div class="glass" style="padding:18px">Aucun modèle.</div>'}</div>
-    <div class="bar" style="bottom:90px"><a class="btn" style="display:flex;align-items:center;justify-content:center" href="#/produit/new">Ajouter un modèle</a></div></div>`;
+    <div class="bar row" style="bottom:90px;gap:8px"><a class="btn2" style="flex:1;display:flex;align-items:center;justify-content:center" href="#/produit/new">Un modèle</a><a class="btn" style="flex:1.4;display:flex;align-items:center;justify-content:center" href="#/import">Importer du stock</a></div></div>`;
 };
 routes.produit = async (id) => {
   const isNew = id === 'new';
@@ -293,3 +294,43 @@ routes.plus = async () => `<div class="pad">${title('Plus', 'Gestion de la plate
     ${[['produits', 'Produits et variantes', 'Modèles, couleurs, pointures, photos'], ['livreurs', 'Livreurs', 'Ajouter et gérer les livreurs'], ['reversements', 'Reversements', 'Sommes encaissées par les livreurs']].map(([k, t, d], i) => `<a class="row" style="min-height:72px;${i ? 'border-top:1px solid rgba(10,12,20,.07)' : ''}" href="#/${k}"><span><span class="t1">${t}</span><span class="t2">${d}</span></span><span>›</span></a>`).join('')}
     ${[['Revendeurs', 'Comptes et abonnements'], ['Zones et frais de livraison', 'Quartiers et tarifs'], ['Utilisateurs et horaires', 'Boutiques, administrateurs, équipe'], ['Réglages', 'Prix, bêta, priorité de substitution']].map(([t, d]) => `<div class="row" style="min-height:72px;border-top:1px solid rgba(10,12,20,.07);opacity:.5"><span><span class="t1">${t}</span><span class="t2">${d} · bientôt</span></span></div>`).join('')}</div>
   <button class="btn2" style="margin-top:22px" data-act="logout">Se déconnecter</button></div>`;
+
+// ───────── Import du stock par bloc de texte
+function impPreview() {
+  const { models, errors } = parseStockBlock(S.imp.text);
+  const total = models.reduce((t, m) => t + m.colors.reduce((a, c) => a + c.sizes.reduce((x, z) => x + z.qty, 0), 0), 0);
+  S.imp.ok = models.length > 0 && !errors.length;
+  if (!S.imp.text.trim()) return '';
+  return `${errors.length ? `<div class="glass" style="padding:14px 16px;margin-top:14px;color:#B42318;font-size:13px;line-height:1.5">${errors.map((e) => `${e.line ? 'Ligne ' + e.line + ' : ' : ''}${esc(e.msg)}`).join('<br>')}</div>` : ''}
+    ${models.map((m) => `<div class="glass" style="padding:14px 16px;margin-top:12px"><div class="row"><b>${esc(m.name)}</b><span style="font-size:13px">${m.price == null ? 'prix inchangé' : fcfa(m.price)}</span></div>${m.colors.map((c) => `<div class="row" style="justify-content:flex-start;align-items:flex-start;gap:10px;margin-top:8px"><i class="dot-c" style="background:${hex(c.hex || c.name)};margin-top:3px"></i><span style="font-size:13px"><b>${esc(c.name)}</b> : ${c.sizes.map((z) => z.size + (z.qty !== 1 ? '×' + z.qty : '')).join('  ')}</span></div>`).join('')}</div>`).join('')}
+    ${S.imp.ok ? `<div class="mono" style="margin-top:12px">${models.length} modèle(s) · ${models.reduce((t, m) => t + m.colors.reduce((a, c) => a + c.sizes.length, 0), 0)} variante(s) · ${total} paire(s)</div>` : ''}`;
+}
+routes.import = async () => {
+  const bs = await boutiquesList();
+  if (!S.imp) S.imp = { text: '', boutique: bs[0] ? bs[0].id : 1, mode: 'add', ok: false };
+  const prev = impPreview();
+  return `<div class="pad">${back('produits')}${title('Importer<br>du stock', 'Collez votre liste')}
+    <div class="mono" style="margin-top:16px">Boutique qui reçoit ce stock</div>
+    <div class="chips">${bs.map((b) => `<button class="chip" aria-pressed="${S.imp.boutique === b.id}" data-act="impBoutique" data-v="${b.id}">${esc(b.name)}</button>`).join('')}</div>
+    <div class="mono">Mode</div>
+    <div class="chips"><button class="chip" aria-pressed="${S.imp.mode === 'add'}" data-act="impMode" data-v="add">Ajouter au stock</button><button class="chip" aria-pressed="${S.imp.mode === 'set'}" data-act="impMode" data-v="set">Remplacer le stock</button></div>
+    <label class="mono" for="imp">Votre liste</label>
+    <textarea class="inp" id="imp" style="height:220px;padding:14px 16px;font-family:'JetBrains Mono',monospace;font-size:13px" placeholder="Modèle A | 10000 | Sneakers&#10;Noir : 40 41 42x2&#10;Jaune : 39 40&#10;&#10;Modèle B | 8000&#10;Marron : 42x3 43" data-input-act="impInput">${esc(S.imp.text)}</textarea>
+    <div style="font-size:12px;color:#667085;margin-top:8px;line-height:1.5">Une ligne par modèle (nom | prix | catégorie facultative), puis une ligne par couleur avec ses pointures. « 42x2 » = 2 paires en 42. Sans « x », c’est 1 paire. Pour fixer une teinte : « Jaune #F2C200 : 39 40 ». Les modèles créés sont <b>masqués</b> jusqu’à ce que vous les publiiez.</div>
+    <div id="impPreview">${prev}</div></div>
+    <div class="bar" style="bottom:90px"><button class="btn" id="impGo" data-act="impCreate" ${S.imp.ok ? '' : 'disabled'}>Créer le stock</button></div>`;
+};
+handlers.impInput = (el) => {
+  S.imp.text = el.value;
+  document.getElementById('impPreview').innerHTML = impPreview();
+  document.getElementById('impGo').disabled = !S.imp.ok;
+};
+handlers.impBoutique = (el) => { S.imp.boutique = Number(el.dataset.v); render(true); };
+handlers.impMode = (el) => { S.imp.mode = el.dataset.v; render(true); };
+handlers.impCreate = () => once('imp', async () => {
+  const { models, errors } = parseStockBlock(S.imp.text);
+  if (errors.length || !models.length) throw new Error('Corrigez les erreurs avant de créer.');
+  const r = must(await sb.rpc('import_stock', { p_boutique: S.imp.boutique, p_mode: S.imp.mode, p_data: models }));
+  toast(`${r.models_created} modèle(s) créé(s) · ${r.variants_created} variante(s) · ${r.units} paire(s)`);
+  S.imp.text = ''; go('/produits');
+});

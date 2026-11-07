@@ -1,15 +1,17 @@
 import { sb, S, routes, handlers, persist, go, render, toast, stepper, hex } from './core.js';
-import { esc, fcfa, cartTotals, estimateFee, planActive } from './lib.js';
+import { esc, fcfa, cartTotals, estimateFee, planActive, strip } from './lib.js';
 import { SOCKS_COLORS, SOCKS_LONG_BRANDS, LACES_COLORS } from './config.js';
 
 export async function ensureCatalogue() {
   if (S.catalogue) return S.catalogue;
-  const [m, v, p] = await Promise.all([
+  const [m, v, p, k] = await Promise.all([
     sb.from('catalogue').select('*').order('name'),
     sb.from('catalogue_variants').select('*'),
     sb.from('catalogue_photos').select('*'),
+    sb.from('colors').select('*'),
   ]);
   for (const r of [m, v, p]) if (r.error) throw r.error;
+  S.colorHex = Object.fromEntries((k.data || []).map((x) => [strip(x.name), x.hex]));
   S.catalogue = { models: m.data || [], variants: v.data || [], photos: p.data || [] };
   return S.catalogue;
 }
@@ -26,7 +28,7 @@ function gridHtml() {
   const list = S.catalogue.models.filter((m) => (!S.cat || m.category === S.cat) && (!q || (m.name + ' ' + (m.ref || '')).toLowerCase().includes(q)));
   if (!list.length) return '<div class="glass" style="padding:18px;grid-column:1/-1">Aucun modèle trouvé.</div>';
   return list.map((m) => `<a class="glass card" href="#/produit/${m.model_id}">
-    <div class="ph" style="height:140px;border-radius:16px">${img(photoOf(m.model_id))}</div>
+    <div class="ph" style="aspect-ratio:1/1;border-radius:16px">${img(photoOf(m.model_id))}</div>
     <div style="font-size:14px;font-weight:600;margin-top:10px">${esc(m.name)}</div>
     <div class="row" style="margin-top:6px"><span style="display:flex;gap:4px">${colorsOf(m.model_id).slice(0, 4).map((c) => `<span style="width:14px;height:14px;border-radius:50%;background:${hex(c)};border:1px solid rgba(10,12,20,.18)"></span>`).join('')}</span><b style="font-size:13px">${fcfa(m.price_fcfa)}</b></div></a>`).join('');
 }
@@ -52,11 +54,11 @@ routes.produit = async (id) => {
   if (!sizes.includes(S.sel.size)) S.sel.size = sizes[0] || null;
   return `<div class="pad">
     <a href="#/catalogue" class="back" style="position:static;margin-bottom:8px" aria-label="Retour">‹</a>
-    <div class="ph" style="height:230px;border-radius:28px">${img(photoOf(id, S.sel.color))}</div>
+    <div class="ph fit" style="min-height:230px;border-radius:28px">${img(photoOf(id, S.sel.color))}</div>
     <div class="row" style="align-items:flex-start;margin-top:16px"><div><div style="font-size:24px;font-weight:600;letter-spacing:-.5px">${esc(m.name)}</div><div class="mono" style="margin-top:6px">Réf. ${esc(m.ref || '—')}</div></div><b style="font-size:17px;margin-top:4px">${fcfa(m.price_fcfa)}</b></div>
     ${m.description ? `<p style="color:#3B4150;font-size:14px;line-height:1.5">${esc(m.description)}</p>` : ''}
     <div class="mono" style="margin-top:18px">Couleur · ${esc(S.sel.color)}</div>
-    <div>${colorsOf(id).map((col) => `<button class="sw" aria-label="${esc(col)}" aria-pressed="${col === S.sel.color}" data-act="selColor" data-v="${esc(col)}"><i style="background:${hex(col)}"></i></button>`).join('')}</div>
+    <div class="chips" style="flex-wrap:wrap">${colorsOf(id).map((col) => `<button class="chip" style="display:flex;align-items:center;gap:8px" aria-pressed="${col === S.sel.color}" data-act="selColor" data-v="${esc(col)}"><i class="dot-c" style="background:${hex(col)}"></i>${esc(col)}</button>`).join('')}</div>
     <div class="mono" style="margin-top:14px">Pointure · ${esc(S.sel.size ?? '—')}</div>
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:10px">${sizes.map((s) => `<button class="chip big" aria-pressed="${s === S.sel.size}" data-act="selSize" data-v="${s}">${s}</button>`).join('')}</div>
     <div class="row" style="margin-top:16px"><span class="mono">Quantité</span>${stepper('selQtyDec', 'selQtyInc', S.sel.qty)}</div>
