@@ -1,3 +1,4 @@
+importScripts('./push-sw.js'); // notifications push (lot H) : push-sw.js doit être envoyé avec ce fichier
 // Service worker minimal : réseau d'abord, copie de secours si hors ligne
 const CACHE = 'offstep-v1';
 self.addEventListener('install', () => self.skipWaiting());

@@ -67,6 +67,8 @@ const GROUP = { produit: 'catalogue', livraison: 'panier', paiement: 'panier', c
 export const NAVCONF = { home: 'catalogue', items: NAV, group: GROUP, badge: (k) => (k === 'panier' ? cartCount(S.cart) : 0) };
 
 export function renderNav(name) {
+  const cb = document.getElementById('cartBadge'); // pastille du panier, dans l'en-tête
+  if (cb) { const n = cartCount(S.cart); cb.textContent = n > 99 ? '99+' : n; cb.hidden = !n; }
   const nav = document.getElementById('nav');
   if (!nav) return;
   const active = NAVCONF.group[name] || name;

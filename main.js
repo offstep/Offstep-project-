@@ -4,9 +4,10 @@ import './shop.js';
 import './checkout.js';
 import './account.js';
 import './photos.js';
+import './home.js';
 
 // Le catalogue se met à jour tout seul : toutes les 30 secondes et au retour sur l'application
-const LIVE = ['catalogue', 'produit', 'photos'];
+const LIVE = ['accueil', 'catalogue', 'produit', 'photos'];
 const routeName = () => location.hash.replace(/^#/, '').split('/').filter(Boolean)[0] || 'catalogue';
 const typing = () => document.activeElement && ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName);
 async function refresh() {

@@ -31,10 +31,11 @@ function gridHtml() {
     ${phBox(pickPhoto(m.model_id, colorsOf(m.model_id)[0]), 'aspect-ratio:4/5;border-radius:20px', m.name)}
     <div style="font-size:14px;font-weight:600;margin-top:10px">${esc(m.name)}</div>
     ${m.category ? `<div class="mono" style="margin-top:4px">${esc(m.category)}</div>` : ''}
-    <div class="row" style="margin-top:6px"><span class="mono" style="font-size:9px;letter-spacing:.8px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(colorsOf(m.model_id).slice(0, 3).join(' · '))}</span><b style="font-size:13px">${fcfa(m.price_fcfa)}</b></div></a>`).join('');
+    <div class="row" style="margin-top:6px"><span class="mono" style="font-size:9px;letter-spacing:.8px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(colorsOf(m.model_id).map((c) => String(c).replace(/^[\s•·*–—-]+/, '')).slice(0, 3).join(' · '))}</span><b style="font-size:13px">${fcfa(m.price_fcfa)}</b></div></a>`).join('');
 }
 
-routes.catalogue = async () => {
+routes.catalogue = async (brand) => {
+  if (brand && S.catArg !== brand) { S.cat = brand; S.catArg = brand; } else if (!brand) S.catArg = null; // #/catalogue/<marque> (depuis l'accueil)
   const c = await ensureCatalogue();
   const cats = uniqueBrands(c.models.map((m) => m.category));
   return `<div class="pad">

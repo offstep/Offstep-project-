@@ -2,6 +2,8 @@ import { sb, S, routes, handlers, go, render, toast, once, copyText, NAVCONF, he
 import { esc, fcfa, label, fmtDate, parseStockBlock, strip, brandKey, uniqueBrands, BRANDS, sortPhotos, phFill, isKnownColor } from './lib.js';
 NAVCONF.group.import = 'plus';
 NAVCONF.group.couleurs = 'plus';
+NAVCONF.group.vitrine = 'plus';
+import './admin-vitrine.js';
 
 const must = (r) => { if (r.error) throw r.error; return r.data; };
 const tag = (kind, v) => `<span class="tag ${['paye', 'livree', 'terminee', 'confirmee'].includes(v) ? 'dark' : ''}">${esc(label(kind, v))}</span>`;
@@ -367,7 +369,7 @@ routes.reversements = async () => {
 // ───────── Plus
 routes.plus = async () => `<div class="pad">${title('Plus', 'Gestion de la plateforme')}
   <div class="glass" style="padding:0 18px;margin-top:16px">
-    ${[['produits', 'Produits et variantes', 'Modèles, couleurs, pointures, photos'], ['livreurs', 'Livreurs', 'Ajouter et gérer les livreurs'], ['reversements', 'Reversements', 'Sommes encaissées par les livreurs'], ['couleurs', 'Couleurs', 'Teintes des pastilles']].map(([k, t, d], i) => `<a class="row" style="min-height:72px;${i ? 'border-top:1px solid rgba(10,12,20,.07)' : ''}" href="#/${k}"><span><span class="t1">${t}</span><span class="t2">${d}</span></span><span>›</span></a>`).join('')}
+    ${[['produits', 'Produits et variantes', 'Modèles, couleurs, pointures, photos'], ['livreurs', 'Livreurs', 'Ajouter et gérer les livreurs'], ['reversements', 'Reversements', 'Sommes encaissées par les livreurs'], ['couleurs', 'Couleurs', 'Teintes des pastilles'], ['vitrine', 'Vitrine', 'Accueil des revendeurs']].map(([k, t, d], i) => `<a class="row" style="min-height:72px;${i ? 'border-top:1px solid rgba(10,12,20,.07)' : ''}" href="#/${k}"><span><span class="t1">${t}</span><span class="t2">${d}</span></span><span>›</span></a>`).join('')}
     ${[['Revendeurs', 'Comptes et abonnements'], ['Zones et frais de livraison', 'Quartiers et tarifs'], ['Utilisateurs et horaires', 'Boutiques, administrateurs, équipe'], ['Réglages', 'Prix, bêta, priorité de substitution']].map(([t, d]) => `<div class="row" style="min-height:72px;border-top:1px solid rgba(10,12,20,.07);opacity:.5"><span><span class="t1">${t}</span><span class="t2">${d} · bientôt</span></span></div>`).join('')}</div>
   <button class="btn2" style="margin-top:22px" data-act="logout">Se déconnecter</button></div>`;
 
