@@ -3,6 +3,7 @@ import { startSession } from './auth.js';
 import './shop.js';
 import './checkout.js';
 import './account.js';
+import './photos.js';
 
 // Le catalogue se met à jour tout seul : toutes les 30 secondes et au retour sur l'application
 const LIVE = ['catalogue', 'produit', 'photos'];

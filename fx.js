@@ -56,8 +56,8 @@ function initGal(g) {
 }
 
 // ── Plein écran : balayage, pincer pour zoomer, fermer (bouton, Échap)
-function openLB(g, idx) {
-  const srcs = [...g.querySelectorAll('.slide .pf-fg')].map((i) => i.currentSrc || i.src);
+function openLB(g, idx) { viewer([...g.querySelectorAll('.slide .pf-fg')].map((i) => i.currentSrc || i.src), idx); }
+function viewer(srcs, idx = 0, onShare) {
   if (!srcs.length) return;
   const prevFocus = document.activeElement, prevOv = document.body.style.overflow;
   const lb = document.createElement('div'); lb.className = 'lb'; lb.setAttribute('role', 'dialog'); lb.setAttribute('aria-modal', 'true'); lb.setAttribute('aria-label', 'Photo en plein écran');
@@ -69,7 +69,8 @@ function openLB(g, idx) {
     const im = document.createElement('img'); im.src = src; im.alt = ''; im.draggable = false; s.appendChild(im); track.appendChild(s);
     return { im, k: 1, x: 0, y: 0 };
   });
-  lb.append(x, track, num); document.body.appendChild(lb); document.body.style.overflow = 'hidden';
+  lb.append(x, track, num);
+  if (onShare) { const sh = document.createElement('button'); sh.className = 'lb-share'; sh.textContent = 'Partager'; sh.addEventListener('click', onShare); lb.append(sh); } document.body.appendChild(lb); document.body.style.overflow = 'hidden';
   const apply = (o) => { o.im.style.transform = `translate(${o.x}px,${o.y}px) scale(${o.k})`; track.classList.toggle('zoomed', st.some((z) => z.k > 1.02)); };
   const cur = () => Math.round(track.scrollLeft / track.clientWidth);
   const label = () => { num.textContent = srcs.length > 1 ? `${cur() + 1} / ${srcs.length}` : ''; };
@@ -120,3 +121,5 @@ reduce.addEventListener && reduce.addEventListener('change', refresh);
 let raf = 0;
 new MutationObserver(() => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; scan(); }); }).observe(document.body, { childList: true, subtree: true });
 scan();
+
+window.offstepViewer = viewer; // utilisé par photos.js (lot C)

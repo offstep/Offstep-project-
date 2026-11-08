@@ -1,6 +1,6 @@
 import { sb, S, routes, handlers, go, render, toast, once, loadAccount, hex } from './core.js';
 import { esc, fcfa, label, fmtDate, planActive } from './lib.js';
-import { ensureCatalogue, photoOf } from './shop.js';
+import { ensureCatalogue } from './shop.js';
 import { momoPanel, uploadProof, orderBundle } from './checkout.js';
 
 const tagFor = (kind, v) => `<span class="tag ${['paye', 'livree', 'terminee', 'confirmee'].includes(v) ? 'dark' : ''}">${esc(label(kind, v))}</span>`;
@@ -114,24 +114,3 @@ handlers.sendSubProof = (el) => once('proof', async () => {
   S.proofFile = null; toast('Capture envoyée'); render(true);
 });
 
-// Demande de photos : photos réelles, sans prix
-routes.photos = async () => {
-  const c = await ensureCatalogue();
-  const cats = [...new Set(c.models.map((m) => m.category).filter(Boolean))];
-  const list = c.models.filter((m) => !S.cat || m.category === S.cat);
-  return `<div class="pad"><h1 class="h1" style="font-size:32px;margin-top:12px">Demande<br>de photos</h1><div class="mono" style="margin-top:10px">Photos réelles · sans prix</div>
-    <div class="chips" style="margin-top:14px"><button class="chip" aria-pressed="${!S.cat}" data-act="setCat" data-v="">Tous</button>${cats.map((k) => `<button class="chip" aria-pressed="${S.cat === k}" data-act="setCat" data-v="${esc(k)}">${esc(k)}</button>`).join('')}</div>
-    <div class="row" style="margin:6px 0 10px"><span class="mono">${S.photoSel.length} sélectionnée(s)</span><button style="border:0;background:transparent;font-weight:600;min-height:44px" data-act="photoAll">Tout sélectionner</button></div>
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px 10px">${list.map((m) => { const on = S.photoSel.includes(m.model_id); const u = photoOf(m.model_id); return `<button style="border:0;background:transparent;padding:0;text-align:left;color:#0A0C14" aria-pressed="${on}" data-act="togglePhoto" data-v="${m.model_id}"><span class="ph" style="position:relative;display:flex;width:100%;aspect-ratio:1/1;border-radius:18px;${on ? 'outline:2px solid #0A0C14;outline-offset:-2px;' : ''}">${u ? `<img src="${esc(u)}" alt="" loading="lazy">` : 'Photo'}<span style="position:absolute;top:8px;right:8px;width:26px;height:26px;border-radius:50%;${on ? 'background:#0A0C14;color:#fff' : 'background:rgba(255,255,255,.9);border:1.5px solid #AEB3BF'};display:flex;align-items:center;justify-content:center;font-size:14px">${on ? '✓' : ''}</span></span><span style="display:block;font-size:12px;font-weight:600;margin-top:6px">${esc(m.name)}</span></button>`; }).join('')}</div></div>
-    <div class="bar" style="bottom:90px"><button class="btn" data-act="sharePhotos" ${S.photoSel.length ? '' : 'disabled'}>Partager sur WhatsApp</button></div>`;
-};
-handlers.togglePhoto = (el) => { const id = Number(el.dataset.v); S.photoSel = S.photoSel.includes(id) ? S.photoSel.filter((x) => x !== id) : [...S.photoSel, id]; render(true); };
-handlers.photoAll = () => { S.photoSel = S.catalogue.models.filter((m) => !S.cat || m.category === S.cat).map((m) => m.model_id); render(true); };
-handlers.sharePhotos = () => once('photos', async () => {
-  const urls = S.photoSel.map((id) => photoOf(id)).filter(Boolean);
-  if (!urls.length) throw new Error('Aucune photo disponible pour cette sélection.');
-  const files = [];
-  for (const [i, u] of urls.entries()) { const blob = await (await fetch(u)).blob(); files.push(new File([blob], `offstep-${i + 1}.jpg`, { type: blob.type || 'image/jpeg' })); }
-  if (navigator.canShare && navigator.canShare({ files })) { try { await navigator.share({ files }); } catch (e) { if (!e || e.name !== 'AbortError') throw e; } return; }
-  window.open(urls[0], '_blank'); toast('Partage de plusieurs photos indisponible : appuyez longuement sur la photo pour l’enregistrer.');
-});

@@ -157,3 +157,35 @@ export function parseStockBlock(text) {
   models.forEach((m) => { if (!m.colors.length) errors.push({ line: 0, msg: 'Aucune couleur pour ' + m.name }); });
   return { models, errors };
 }
+
+// ───────── Lot C : recherche de photos (fonction pure ; ne lit ni ne renvoie aucune donnée de stock)
+// cat = { models, variants, photos } ; q = { brand?, size, color }
+export function searchPhotos(cat, q) {
+  const { models = [], variants = [], photos = [] } = cat || {};
+  const size = Number(q.size), ck = strip(q.color), bk = brandKey(q.brand);
+  const vmap = new Map();
+  for (const v of variants) { const l = vmap.get(v.model_id) || []; l.push({ color: v.color, size: Number(v.size) }); vmap.set(v.model_id, l); }
+  const pmap = new Map();
+  for (const p of sortPhotos(photos)) { const l = pmap.get(p.model_id) || []; l.push(p); pmap.set(p.model_id, l); }
+  const colorLabel = ((variants.find((v) => strip(v.color) === ck) || {}).color || String(q.color || '')).trim();
+  const item = (m) => {
+    const all = pmap.get(m.model_id) || [], byColor = all.filter((p) => p.color && strip(p.color) === ck), general = all.filter((p) => !p.color);
+    const gallery = byColor.length ? byColor : general.length ? general : all;
+    return { model: m, gallery, cover: gallery[0] || null, rank: byColor.length ? 0 : all.length ? 1 : 2 };
+  };
+  const order = (a, b) => (a.rank - b.rank) || String(a.model.name).localeCompare(String(b.model.name), 'fr') || (a.model.model_id - b.model.model_id);
+  const exact = [], brands = [], sizes = [];
+  for (const m of models) {
+    const vs = vmap.get(m.model_id) || [];
+    const hasColor = vs.some((v) => strip(v.color) === ck), hasBoth = hasColor && vs.some((v) => strip(v.color) === ck && v.size === size);
+    const brandOk = !bk || brandKey(m.category) === bk;
+    if (hasBoth && brandOk) exact.push(item(m));
+    else if (hasBoth && bk) brands.push(item(m));
+    else if (hasColor && brandOk) sizes.push(item(m));
+  }
+  const groups = [];
+  if (exact.length) groups.push({ id: 'exact', title: `Pointure ${size} en ${colorLabel}`, items: exact.sort(order) });
+  if (brands.length) groups.push({ id: 'brands', title: `D'autres marques en ${colorLabel}, pointure ${size}`, items: brands.sort(order) });
+  if (!exact.length && !brands.length && sizes.length) groups.push({ id: 'sizes', title: "Ce modèle existe en d'autres pointures", items: sizes.sort(order) });
+  return { colorLabel, groups };
+}

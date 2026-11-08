@@ -31,7 +31,7 @@ function gridHtml() {
     ${phBox(pickPhoto(m.model_id, colorsOf(m.model_id)[0]), 'aspect-ratio:4/5;border-radius:20px', m.name)}
     <div style="font-size:14px;font-weight:600;margin-top:10px">${esc(m.name)}</div>
     ${m.category ? `<div class="mono" style="margin-top:4px">${esc(m.category)}</div>` : ''}
-    <div class="row" style="margin-top:6px"><span style="display:flex;gap:4px">${colorsOf(m.model_id).slice(0, 4).map((c) => `<span class="dot-c" style="width:14px;height:14px;background:${hex(c)}"></span>`).join('')}</span><b style="font-size:13px">${fcfa(m.price_fcfa)}</b></div></a>`).join('');
+    <div class="row" style="margin-top:6px"><span class="mono" style="font-size:9px;letter-spacing:.8px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(colorsOf(m.model_id).slice(0, 3).join(' · '))}</span><b style="font-size:13px">${fcfa(m.price_fcfa)}</b></div></a>`).join('');
 }
 
 routes.catalogue = async () => {
@@ -67,8 +67,9 @@ routes.produit = async (id) => {
     ${galHtml}
     <div class="row" style="align-items:flex-start;margin-top:16px"><div><div style="font-size:24px;font-weight:600;letter-spacing:-.5px">${esc(m.name)}</div><div class="mono" style="margin-top:6px">Réf. ${esc(m.ref || '—')}</div></div><b style="font-size:17px;margin-top:4px">${fcfa(m.price_fcfa)}</b></div>
     ${m.description ? `<p style="color:#3B4150;font-size:14px;line-height:1.5">${esc(m.description)}</p>` : ''}
+    ${colorsOf(id).length ? '' : '<div class="glass" style="padding:14px 16px;margin-top:18px;font-size:14px">Les couleurs et pointures de ce modèle ne sont pas encore disponibles.</div>'}
     <div class="mono" style="margin-top:18px">Couleur · ${esc(S.sel.color)}</div>
-    <div class="chips" style="flex-wrap:wrap">${colorsOf(id).map((col) => `<button class="chip" style="display:flex;align-items:center;gap:8px" aria-pressed="${col === S.sel.color}" data-act="selColor" data-v="${esc(col)}"><i class="dot-c" style="background:${hex(col)}"></i>${esc(col)}</button>`).join('')}</div>
+    <div class="chips" style="flex-wrap:wrap">${colorsOf(id).map((col) => `<button class="chip" aria-pressed="${col === S.sel.color}" data-act="selColor" data-v="${esc(col)}">${esc(col)}</button>`).join('')}</div>
     <div class="mono" style="margin-top:14px">Pointure · ${esc(S.sel.size ?? '—')}</div>
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:10px">${sizes.map((s) => `<button class="chip big" aria-pressed="${s === S.sel.size}" data-act="selSize" data-v="${s}">${s}</button>`).join('')}</div>
     <div class="row" style="margin-top:16px"><span class="mono">Quantité</span>${stepper('selQtyDec', 'selQtyInc', S.sel.qty)}</div>
@@ -96,7 +97,7 @@ handlers.addToCart = () => {
 };
 
 const optQty = (kind, color, sub = '') => ((S.cart[kind].find((x) => x.color === color && (x.sub || '') === sub) || {}).qty) || 0;
-const optRow = (kind, color, sub, title) => `<div class="row" style="min-height:56px;border-top:1px solid rgba(10,12,20,.07)"><span style="display:flex;align-items:center;gap:10px"><i style="width:18px;height:18px;border-radius:50%;background:${hex(color)};border:1px solid rgba(10,12,20,.18)"></i><span style="font-size:14px;font-weight:600">${esc(title)}</span></span>${stepper('optDec', 'optInc', optQty(kind, color, sub), `data-kind="${kind}" data-color="${esc(color)}" data-sub="${esc(sub)}"`)}</div>`;
+const optRow = (kind, color, sub, title) => `<div class="row" style="min-height:56px;border-top:1px solid rgba(10,12,20,.07)"><span style="font-size:14px;font-weight:600">${esc(title)}</span>${stepper('optDec', 'optInc', optQty(kind, color, sub), `data-kind="${kind}" data-color="${esc(color)}" data-sub="${esc(sub)}"`)}</div>`;
 
 export const feeNow = () => estimateFee(S.sub, S.settings, S.credit);
 
