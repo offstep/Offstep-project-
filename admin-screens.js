@@ -1,6 +1,7 @@
 import { sb, S, routes, handlers, go, render, toast, once, copyText, NAVCONF, hex } from './core.js';
-import { esc, fcfa, label, fmtDate, parseStockBlock } from './lib.js';
+import { esc, fcfa, label, fmtDate, parseStockBlock, strip, brandKey, uniqueBrands, BRANDS, sortPhotos, phFill, isKnownColor } from './lib.js';
 NAVCONF.group.import = 'plus';
+NAVCONF.group.couleurs = 'plus';
 
 const must = (r) => { if (r.error) throw r.error; return r.data; };
 const tag = (kind, v) => `<span class="tag ${['paye', 'livree', 'terminee', 'confirmee'].includes(v) ? 'dark' : ''}">${esc(label(kind, v))}</span>`;
@@ -210,22 +211,22 @@ routes.produit = async (id) => {
   if (!isNew) {
     m = must(await sb.from('models').select('*').eq('id', Number(id)).single());
     vars = must(await sb.from('variants').select('*').eq('model_id', m.id));
-    photos = must(await sb.from('model_photos').select('*').eq('model_id', m.id));
+    photos = sortPhotos(must(await sb.from('model_photos').select('*').eq('model_id', m.id)));
   }
+  const brandList = uniqueBrands([...must(await sb.from('models').select('category')).map((x) => x.category), ...BRANDS]);
   if (!S.edit || S.edit.key !== String(id)) S.edit = { key: String(id), id: isNew ? null : m.id, name: m.name || '', ref: m.ref || '', category: m.category || '', description: m.description || '', price: m.price_fcfa ?? '', published: isNew ? true : m.published, colors: '', sizes: '', photoColor: '' };
   const e = S.edit;
   const fld = (k, l, type = 'text') => `<label class="mono" for="e_${k}">${l}</label><input class="inp" id="e_${k}" type="${type}" value="${esc(e[k])}" data-bind="edit.${k}">`;
+  const brandFld = `<label class="mono" for="e_category">Marque</label><input class="inp" id="e_category" list="brands" autocomplete="off" value="${esc(e.category)}" data-bind="edit.category"><datalist id="brands">${brandList.map((b) => `<option value="${esc(b)}"></option>`).join('')}</datalist>`;
   return `<div class="pad">${back('produits')}<div class="mono">Modèle</div><h1 class="h1" style="font-size:30px;margin-top:6px">${esc(e.name || 'Nouveau modèle')}</h1>
-    ${fld('name', 'Nom du modèle')}${fld('ref', 'Référence interne')}${fld('category', 'Catégorie')}${fld('price', 'Prix, identique pour tous (FCFA)', 'number')}
+    ${fld('name', 'Nom du modèle')}${fld('ref', 'Référence interne')}${brandFld}${fld('price', 'Prix, identique pour tous (FCFA)', 'number')}
     <label class="mono" for="e_description">Description</label><textarea class="inp" id="e_description" style="height:90px;padding:14px 16px;resize:none" data-bind="edit.description">${esc(e.description)}</textarea>
     <div class="glass" style="margin-top:14px;padding:0 18px;display:flex;align-items:center;justify-content:space-between;min-height:64px"><div><div class="t1">Publié</div><div class="t2">Visible dans le catalogue</div></div><button class="chip" aria-pressed="${e.published}" data-act="togglePub">${e.published ? 'Oui' : 'Non'}</button></div>
     <div class="sec">Ajouter des variantes</div>
     <div style="font-size:13px;color:#667085;line-height:1.4">Séparez par des virgules. Chaque couleur × pointure crée une variante, à 0 en stock dans les 3 boutiques.</div>
     ${fld('colors', 'Couleurs (ex : Noir, Blanc)')}${fld('sizes', 'Pointures (ex : 40, 41, 42)')}
     ${vars.length ? `<div style="font-size:13px;color:#667085;margin-top:10px">${vars.length} variante(s) existante(s) : ${[...new Set(vars.map((v) => v.color))].map(esc).join(', ')}</div>` : ''}
-    ${!isNew ? `<div class="sec">Photos réelles</div><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">${photos.map((p) => `<div style="position:relative"><div class="ph" style="aspect-ratio:1/1;border-radius:16px"><img src="${esc(p.url)}" alt=""></div><button class="chip" style="position:absolute;right:4px;top:4px;height:30px;padding:0 10px" data-act="delPhoto" data-v="${p.id}">×</button></div>`).join('')}</div>
-      ${fld('photoColor', 'Couleur de la photo (facultatif)')}
-      <label class="drop" style="margin-top:10px;cursor:pointer" for="photoFile">Ajouter des photos</label><input id="photoFile" type="file" accept="image/*" multiple data-change-act="uploadPhotos">` : '<div style="font-size:13px;color:#667085;margin-top:14px">Enregistrez le modèle pour ajouter des photos.</div>'}
+    ${isNew ? '<div style="font-size:13px;color:#667085;margin-top:14px">Enregistrez le modèle pour ajouter des photos.</div>' : photoManager(photos, vars, e)}
     </div><div class="bar" style="bottom:90px"><button class="btn" data-act="saveModel">Enregistrer</button></div>`;
 };
 handlers.togglePub = () => { S.edit.published = !S.edit.published; render(true); };
@@ -234,6 +235,8 @@ handlers.saveModel = () => once('save', async () => {
   if (!e.name.trim()) throw new Error('Indiquez le nom du modèle.');
   const price = parseInt(e.price, 10);
   if (isNaN(price) || price < 0) throw new Error('Prix invalide.');
+  const known = uniqueBrands(must(await sb.from('models').select('category')).map((x) => x.category)), typed = (e.category || '').trim().replace(/\s+/g, ' ');
+  e.category = known.find((b) => brandKey(b) === brandKey(typed)) || typed;
   const row = { name: e.name.trim(), ref: e.ref || null, category: e.category || null, description: e.description || null, price_fcfa: price, published: e.published };
   let id = e.id;
   if (id) must(await sb.from('models').update(row).eq('id', id));
@@ -244,18 +247,91 @@ handlers.saveModel = () => once('save', async () => {
   S.edit = null; toast('Modèle enregistré');
   if (location.hash === '#/produit/' + id) await render(); else go('/produit/' + id);
 });
+const needSql = (err) => { throw /position|thumb_url|column/i.test(String((err && err.message) || '')) ? new Error('Lancez d’abord le script SQL « étape 15 » dans Supabase.') : err; };
+const storagePath = (u) => { const m = String(u || '').match(/\/object\/public\/photos\/([^?]+)/); return m ? decodeURIComponent(m[1]) : null; };
+function photoManager(photos, vars, e) {
+  const cols = [...new Set(vars.map((v) => v.color))];
+  const opts = (sel) => `<option value="">Toutes</option>${cols.map((c) => `<option value="${esc(c)}" ${c === sel ? 'selected' : ''}>${esc(c)}</option>`).join('')}`;
+  return `<div class="sec">Photos réelles</div>
+    ${photos.map((p, i) => `<div class="glass" style="padding:10px;display:flex;gap:10px;align-items:center;margin-top:10px"><div class="ph ph-fill" style="width:72px;height:72px;border-radius:16px;flex:none">${phFill(p.thumb_url || p.url, p.thumb_url || p.url, { eager: true })}</div><div style="flex:1;min-width:0">${i === 0 ? '<span class="tag dark">Couverture</span>' : `<span class="mono">Photo ${i + 1}</span>`}<select class="inp" style="height:44px;margin-top:6px" aria-label="Couleur de la photo ${i + 1}" data-change-act="photoColor" data-v="${p.id}">${opts(p.color)}</select></div><div class="stack" style="gap:6px"><button class="sb" style="width:40px;height:40px" aria-label="Monter" data-act="photoMove" data-v="${p.id}" data-d="-1" ${i === 0 ? 'disabled' : ''}>↑</button><button class="sb" style="width:40px;height:40px" aria-label="Descendre" data-act="photoMove" data-v="${p.id}" data-d="1" ${i === photos.length - 1 ? 'disabled' : ''}>↓</button></div><button class="sb" aria-label="Supprimer la photo ${i + 1}" data-act="delPhoto" data-v="${p.id}">×</button></div>`).join('') || '<div style="font-size:13px;color:#667085;margin-top:8px">Aucune photo.</div>'}
+    <label class="mono" for="e_photoColor">Couleur des nouvelles photos</label><select class="inp" id="e_photoColor" data-bind="edit.photoColor">${opts(e.photoColor)}</select>
+    <label class="drop" style="margin-top:10px;cursor:pointer" for="photoFile">Ajouter des photos (plusieurs à la fois)</label><input id="photoFile" type="file" accept="image/*" multiple data-change-act="uploadPhotos">
+    <div class="pbar" aria-hidden="true"><i id="upbar"></i></div>`;
+}
+// Réduction avant envoi : 1 600 px max (JPEG 0,82) + miniature 480 px
+async function shrink(file) {
+  let bmp;
+  try { bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }); } catch { throw new Error('Photo illisible (format non pris en charge, par exemple HEIC). Utilisez JPEG ou PNG.'); }
+  const make = (max, q) => new Promise((ok, ko) => {
+    const k = Math.min(1, max / Math.max(bmp.width, bmp.height)), c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(bmp.width * k)); c.height = Math.max(1, Math.round(bmp.height * k));
+    const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); x.drawImage(bmp, 0, 0, c.width, c.height);
+    c.toBlob((b) => (b ? ok(b) : ko(new Error('Photo illisible.'))), 'image/jpeg', q);
+  });
+  try { return { full: await make(1600, 0.82), thumb: await make(480, 0.8) }; } finally { if (bmp.close) bmp.close(); }
+}
 handlers.uploadPhotos = (el) => once('photo', async () => {
   const e = S.edit;
   if (!e || !e.id) throw new Error('Enregistrez d’abord le modèle.');
-  for (const f of el.files) {
-    const path = `${e.id}/${Date.now()}-${f.name.replace(/[^a-z0-9.]/gi, '_')}`;
-    must(await sb.storage.from('photos').upload(path, f, { contentType: f.type || 'image/jpeg' }));
-    const { data } = sb.storage.from('photos').getPublicUrl(path);
-    must(await sb.from('model_photos').insert({ model_id: e.id, color: e.photoColor || null, url: data.publicUrl }));
+  const files = [...el.files]; el.value = '';
+  if (!files.length) return;
+  const bar = document.getElementById('upbar');
+  let pos = 0, ok = 0; const fail = [];
+  try { pos = must(await sb.from('model_photos').select('position').eq('model_id', e.id)).reduce((m, x) => Math.max(m, x.position ?? -1), -1) + 1; } catch (err) { needSql(err); }
+  for (let i = 0; i < files.length; i++) {
+    const f = files[i];
+    try {
+      const { full, thumb } = await shrink(f);
+      const base = `modele/${e.id}/${Date.now()}-${f.name.replace(/\.[^.]*$/, '').replace(/[^a-z0-9]/gi, '_').slice(0, 40)}`;
+      must(await sb.storage.from('photos').upload(base + '.jpg', full, { contentType: 'image/jpeg' }));
+      must(await sb.storage.from('photos').upload(base + '-t.jpg', thumb, { contentType: 'image/jpeg' }));
+      const url = sb.storage.from('photos').getPublicUrl(base + '.jpg').data.publicUrl, tu = sb.storage.from('photos').getPublicUrl(base + '-t.jpg').data.publicUrl;
+      must(await sb.from('model_photos').insert({ model_id: e.id, color: e.photoColor || null, url, thumb_url: tu, position: pos++ }));
+      ok++;
+    } catch (err) { fail.push(`${f.name} : ${(err && err.message) || err}`); }
+    if (bar) bar.style.width = Math.round(((i + 1) / files.length) * 100) + '%';
   }
-  toast('Photos ajoutées'); render(true);
+  toast(fail.length ? `${ok} photo(s) ajoutée(s), ${fail.length} échec(s). ${fail[0]}` : `${ok} photo(s) ajoutée(s)`);
+  render(true);
 });
-handlers.delPhoto = (el) => once('photo', async () => { must(await sb.from('model_photos').delete().eq('id', Number(el.dataset.v))); render(true); });
+handlers.photoColor = (el) => once('photo', async () => { must(await sb.from('model_photos').update({ color: el.value || null }).eq('id', Number(el.dataset.v))); toast('Couleur enregistrée'); render(true); });
+handlers.photoMove = (el) => once('photo', async () => {
+  const ps = sortPhotos(must(await sb.from('model_photos').select('*').eq('model_id', S.edit.id)));
+  const i = ps.findIndex((p) => p.id === Number(el.dataset.v)), j = i + Number(el.dataset.d);
+  if (i < 0 || j < 0 || j >= ps.length) return;
+  [ps[i], ps[j]] = [ps[j], ps[i]];
+  try { for (let k = 0; k < ps.length; k++) if ((ps[k].position || 0) !== k) must(await sb.from('model_photos').update({ position: k }).eq('id', ps[k].id)); } catch (err) { needSql(err); }
+  render(true);
+});
+handlers.delPhoto = (el) => once('photo', async () => {
+  const id = Number(el.dataset.v), row = must(await sb.from('model_photos').select('*').eq('id', id).single());
+  must(await sb.from('model_photos').delete().eq('id', id));
+  const paths = [storagePath(row.url), storagePath(row.thumb_url)].filter(Boolean);
+  if (paths.length) await sb.storage.from('photos').remove(paths); // un échec ici ne bloque pas
+  render(true);
+});
+
+// ───────── Couleurs : teintes des pastilles
+const canProduits = () => { const p = S.profile; return !p || p.role === 'admin' || !!(p.rights && (p.rights.produits === true || (Array.isArray(p.rights) && p.rights.includes('produits')))); };
+const solid = (c) => (/^#[0-9a-f]{6}$/i.test(c || '') ? c : '#C9CDD6');
+routes.couleurs = async () => {
+  if (!canProduits()) return `<div class="pad">${back('plus')}<div class="glass" style="padding:18px;margin-top:12px">Le droit « Produits » est nécessaire pour cet écran.</div></div>`;
+  const vs = must(await sb.from('variants').select('color')), cs = must(await sb.from('colors').select('*'));
+  S.colorHex = Object.fromEntries(cs.map((x) => [strip(x.name), x.hex]));
+  const saved = Object.fromEntries(cs.map((x) => [strip(x.name), x.name])), seen = new Map();
+  [...vs.map((v) => v.color), ...cs.map((x) => x.name)].forEach((n) => { const k = strip(n); if (k && !seen.has(k)) seen.set(k, String(n).trim()); });
+  const rows = [...seen.entries()].map(([k, n]) => ({ n, t: saved[k] || '', known: isKnownColor(n, S.colorHex) })).sort((a, b) => (a.known - b.known) || a.n.localeCompare(b.n, 'fr'));
+  return `<div class="pad">${back('plus')}${title('Couleurs', 'Teinte de chaque pastille')}
+    <div style="font-size:13px;color:#667085;margin-top:12px;line-height:1.5">« À définir » : le nom n’est pas reconnu, la pastille est grise. Choisissez une teinte puis enregistrez.</div>
+    <div class="stack" style="margin-top:14px">${rows.map((r, i) => `<div class="glass" style="padding:12px 14px"><div class="row"><span style="display:flex;align-items:center;gap:10px;min-width:0"><i class="dot-c" style="width:26px;height:26px;background:${hex(r.n)}"></i><b style="font-size:15px">${esc(r.n)}</b></span>${r.known ? (r.t ? '<span class="tag">Teinte fixée</span>' : '') : '<span class="tag dark">À définir</span>'}</div>
+      <div class="row" style="margin-top:10px"><input type="color" id="col_${i}" value="${solid(hex(r.n)).toLowerCase()}" aria-label="Teinte de ${esc(r.n)}" style="width:56px;height:44px;border:1px solid rgba(10,12,20,.12);border-radius:12px;padding:2px;background:#fff"><span style="display:flex;gap:8px"><button class="chip" data-act="saveColor" data-n="${esc(r.n)}" data-t="${esc(r.t)}" data-f="col_${i}">Enregistrer</button>${r.t ? `<button class="chip" data-act="delColor" data-t="${esc(r.t)}">Supprimer la teinte</button>` : ''}</span></div></div>`).join('') || '<div class="glass" style="padding:18px">Aucune couleur pour le moment.</div>'}</div></div>`;
+};
+handlers.saveColor = (el) => once('col', async () => {
+  const v = document.getElementById(el.dataset.f).value.toUpperCase();
+  must(await sb.from('colors').upsert({ name: el.dataset.t || el.dataset.n, hex: v }, { onConflict: 'name' }));
+  toast('Teinte enregistrée'); render(true);
+});
+handlers.delColor = (el) => once('col', async () => { must(await sb.from('colors').delete().eq('name', el.dataset.t)); toast('Teinte supprimée'); render(true); });
 
 // ───────── Livreurs
 routes.livreurs = async () => {
@@ -291,7 +367,7 @@ routes.reversements = async () => {
 // ───────── Plus
 routes.plus = async () => `<div class="pad">${title('Plus', 'Gestion de la plateforme')}
   <div class="glass" style="padding:0 18px;margin-top:16px">
-    ${[['produits', 'Produits et variantes', 'Modèles, couleurs, pointures, photos'], ['livreurs', 'Livreurs', 'Ajouter et gérer les livreurs'], ['reversements', 'Reversements', 'Sommes encaissées par les livreurs']].map(([k, t, d], i) => `<a class="row" style="min-height:72px;${i ? 'border-top:1px solid rgba(10,12,20,.07)' : ''}" href="#/${k}"><span><span class="t1">${t}</span><span class="t2">${d}</span></span><span>›</span></a>`).join('')}
+    ${[['produits', 'Produits et variantes', 'Modèles, couleurs, pointures, photos'], ['livreurs', 'Livreurs', 'Ajouter et gérer les livreurs'], ['reversements', 'Reversements', 'Sommes encaissées par les livreurs'], ['couleurs', 'Couleurs', 'Teintes des pastilles']].map(([k, t, d], i) => `<a class="row" style="min-height:72px;${i ? 'border-top:1px solid rgba(10,12,20,.07)' : ''}" href="#/${k}"><span><span class="t1">${t}</span><span class="t2">${d}</span></span><span>›</span></a>`).join('')}
     ${[['Revendeurs', 'Comptes et abonnements'], ['Zones et frais de livraison', 'Quartiers et tarifs'], ['Utilisateurs et horaires', 'Boutiques, administrateurs, équipe'], ['Réglages', 'Prix, bêta, priorité de substitution']].map(([t, d]) => `<div class="row" style="min-height:72px;border-top:1px solid rgba(10,12,20,.07);opacity:.5"><span><span class="t1">${t}</span><span class="t2">${d} · bientôt</span></span></div>`).join('')}</div>
   <button class="btn2" style="margin-top:22px" data-act="logout">Se déconnecter</button></div>`;
 
@@ -302,7 +378,7 @@ function impPreview() {
   S.imp.ok = models.length > 0 && !errors.length;
   if (!S.imp.text.trim()) return '';
   return `${errors.length ? `<div class="glass" style="padding:14px 16px;margin-top:14px;color:#B42318;font-size:13px;line-height:1.5">${errors.map((e) => `${e.line ? 'Ligne ' + e.line + ' : ' : ''}${esc(e.msg)}`).join('<br>')}</div>` : ''}
-    ${models.map((m) => `<div class="glass" style="padding:14px 16px;margin-top:12px"><div class="row"><b>${esc(m.name)}</b><span style="font-size:13px">${m.price == null ? 'prix inchangé' : fcfa(m.price)}</span></div>${m.colors.map((c) => `<div class="row" style="justify-content:flex-start;align-items:flex-start;gap:10px;margin-top:8px"><i class="dot-c" style="background:${hex(c.hex || c.name)};margin-top:3px"></i><span style="font-size:13px"><b>${esc(c.name)}</b> : ${c.sizes.map((z) => z.size + (z.qty !== 1 ? '×' + z.qty : '')).join('  ')}</span></div>`).join('')}</div>`).join('')}
+    ${models.map((m) => `<div class="glass" style="padding:14px 16px;margin-top:12px"><div class="row"><b>${esc(m.name)}${m.category ? ` <span class="mono" style="font-size:10px">Marque ${esc(m.category)}</span>` : ''}</b><span style="font-size:13px">${m.price == null ? 'prix inchangé' : fcfa(m.price)}</span></div>${m.colors.map((c) => `<div class="row" style="justify-content:flex-start;align-items:flex-start;gap:10px;margin-top:8px"><i class="dot-c" style="background:${hex(c.hex || c.name)};margin-top:3px"></i><span style="font-size:13px"><b>${esc(c.name)}</b> : ${c.sizes.map((z) => z.size + (z.qty !== 1 ? '×' + z.qty : '')).join('  ')}</span></div>`).join('')}</div>`).join('')}
     ${S.imp.ok ? `<div class="mono" style="margin-top:12px">${models.length} modèle(s) · ${models.reduce((t, m) => t + m.colors.reduce((a, c) => a + c.sizes.length, 0), 0)} variante(s) · ${total} paire(s)</div>` : ''}`;
 }
 routes.import = async () => {
@@ -316,7 +392,7 @@ routes.import = async () => {
     <div class="chips"><button class="chip" aria-pressed="${S.imp.mode === 'add'}" data-act="impMode" data-v="add">Ajouter au stock</button><button class="chip" aria-pressed="${S.imp.mode === 'set'}" data-act="impMode" data-v="set">Remplacer le stock</button></div>
     <label class="mono" for="imp">Votre liste</label>
     <textarea class="inp" id="imp" style="height:220px;padding:14px 16px;font-family:'JetBrains Mono',monospace;font-size:13px" placeholder="Modèle A | 10000 | Sneakers&#10;Noir : 40 41 42x2&#10;Jaune : 39 40&#10;&#10;Modèle B | 8000&#10;Marron : 42x3 43" data-input-act="impInput">${esc(S.imp.text)}</textarea>
-    <div style="font-size:12px;color:#667085;margin-top:8px;line-height:1.5">Une ligne par modèle (nom | prix | catégorie facultative), puis une ligne par couleur avec ses pointures. « 42x2 » = 2 paires en 42. Sans « x », c’est 1 paire. Pour fixer une teinte : « Jaune #F2C200 : 39 40 ». Les modèles créés sont <b>masqués</b> jusqu’à ce que vous les publiiez.</div>
+    <div style="font-size:12px;color:#667085;margin-top:8px;line-height:1.5">Une ligne par modèle (nom | prix | marque facultative), puis une ligne par couleur avec ses pointures. « 42x2 » = 2 paires en 42. Sans « x », c’est 1 paire. Pour fixer une teinte : « Jaune #F2C200 : 39 40 ». Les modèles créés sont <b>masqués</b> jusqu’à ce que vous les publiiez.</div>
     <div id="impPreview">${prev}</div></div>
     <div class="bar" style="bottom:90px"><button class="btn" id="impGo" data-act="impCreate" ${S.imp.ok ? '' : 'disabled'}>Créer le stock</button></div>`;
 };

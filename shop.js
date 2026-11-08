@@ -1,5 +1,5 @@
 import { sb, S, routes, handlers, persist, go, render, toast, stepper, hex } from './core.js';
-import { esc, fcfa, cartTotals, estimateFee, planActive, strip } from './lib.js';
+import { esc, fcfa, cartTotals, estimateFee, planActive, strip, brandKey, uniqueBrands, phFill, sortPhotos, photoIndexForColor } from './lib.js';
 import { SOCKS_COLORS, SOCKS_LONG_BRANDS, LACES_COLORS } from './config.js';
 
 export async function ensureCatalogue() {
@@ -12,33 +12,34 @@ export async function ensureCatalogue() {
   ]);
   for (const r of [m, v, p]) if (r.error) throw r.error;
   S.colorHex = Object.fromEntries((k.data || []).map((x) => [strip(x.name), x.hex]));
-  S.catalogue = { models: m.data || [], variants: v.data || [], photos: p.data || [] };
+  S.catalogue = { models: m.data || [], variants: v.data || [], photos: sortPhotos(p.data || []) };
   return S.catalogue;
 }
 export const colorsOf = (id) => [...new Set(S.catalogue.variants.filter((v) => v.model_id === id).map((v) => v.color))];
 const sizesOf = (id, color) => [...new Set(S.catalogue.variants.filter((v) => v.model_id === id && v.color === color).map((v) => v.size))].sort((a, b) => a - b);
-export const photoOf = (id, color) => {
-  const ps = S.catalogue.photos.filter((p) => p.model_id === id);
-  return (ps.find((p) => p.color === color) || ps[0] || {}).url || '';
-};
-const img = (url) => (url ? `<img src="${esc(url)}" alt="" loading="lazy">` : 'Photo');
+const sameColor = (a, b) => strip(a) === strip(b);
+export const photosOf = (id) => ((S.catalogue && S.catalogue.photos) || []).filter((p) => p.model_id === id);
+const pickPhoto = (id, color) => { const ps = photosOf(id); return (color && ps.find((p) => p.color && sameColor(p.color, color))) || ps[0] || null; };
+export const photoOf = (id, color) => (pickPhoto(id, color) || {}).url || '';
+const phBox = (p, style = '', alt = '') => `<div class="ph ph-fill" style="${style}">${p ? phFill(p.url, p.thumb_url, { alt }) : 'Photo'}</div>`;
 
 function gridHtml() {
-  const q = S.q.trim().toLowerCase();
-  const list = S.catalogue.models.filter((m) => (!S.cat || m.category === S.cat) && (!q || (m.name + ' ' + (m.ref || '')).toLowerCase().includes(q)));
+  const q = strip(S.q), bk = brandKey(S.cat);
+  const list = S.catalogue.models.filter((m) => (!bk || brandKey(m.category) === bk) && (!q || strip(m.name + ' ' + (m.ref || '') + ' ' + (m.category || '')).includes(q)));
   if (!list.length) return '<div class="glass" style="padding:18px;grid-column:1/-1">Aucun modèle trouvé.</div>';
   return list.map((m) => `<a class="glass card" href="#/produit/${m.model_id}">
-    <div class="ph" style="aspect-ratio:1/1;border-radius:16px">${img(photoOf(m.model_id))}</div>
+    ${phBox(pickPhoto(m.model_id, colorsOf(m.model_id)[0]), 'aspect-ratio:4/5;border-radius:20px', m.name)}
     <div style="font-size:14px;font-weight:600;margin-top:10px">${esc(m.name)}</div>
-    <div class="row" style="margin-top:6px"><span style="display:flex;gap:4px">${colorsOf(m.model_id).slice(0, 4).map((c) => `<span style="width:14px;height:14px;border-radius:50%;background:${hex(c)};border:1px solid rgba(10,12,20,.18)"></span>`).join('')}</span><b style="font-size:13px">${fcfa(m.price_fcfa)}</b></div></a>`).join('');
+    ${m.category ? `<div class="mono" style="margin-top:4px">${esc(m.category)}</div>` : ''}
+    <div class="row" style="margin-top:6px"><span style="display:flex;gap:4px">${colorsOf(m.model_id).slice(0, 4).map((c) => `<span class="dot-c" style="width:14px;height:14px;background:${hex(c)}"></span>`).join('')}</span><b style="font-size:13px">${fcfa(m.price_fcfa)}</b></div></a>`).join('');
 }
 
 routes.catalogue = async () => {
   const c = await ensureCatalogue();
-  const cats = [...new Set(c.models.map((m) => m.category).filter(Boolean))];
+  const cats = uniqueBrands(c.models.map((m) => m.category));
   return `<div class="pad">
-    <input class="inp" type="search" aria-label="Rechercher" placeholder="Rechercher un modèle…" value="${esc(S.q)}" data-input-act="search">
-    <div class="chips"><button class="chip" aria-pressed="${!S.cat}" data-act="setCat" data-v="">Tous</button>${cats.map((k) => `<button class="chip" aria-pressed="${S.cat === k}" data-act="setCat" data-v="${esc(k)}">${esc(k)}</button>`).join('')}</div>
+    <input class="inp" type="search" aria-label="Rechercher" placeholder="Rechercher un modèle ou une marque…" value="${esc(S.q)}" data-input-act="search">
+    <div class="chips" role="group" aria-label="Marques"><button class="chip" aria-pressed="${!brandKey(S.cat)}" data-act="setCat" data-v="">Tous</button>${cats.map((k) => `<button class="chip" aria-pressed="${brandKey(S.cat) === brandKey(k)}" data-act="setCat" data-v="${esc(k)}">${esc(k)}</button>`).join('')}</div>
     <div class="grid2" id="grid">${gridHtml()}</div></div>`;
 };
 handlers.search = (el) => { S.q = el.value; document.getElementById('grid').innerHTML = gridHtml(); };
@@ -49,12 +50,21 @@ routes.produit = async (id) => {
   id = Number(id);
   const m = c.models.find((x) => x.model_id === id);
   if (!m) return '<div class="pad"><div class="glass" style="padding:18px">Modèle introuvable.</div></div>';
-  if (!S.sel || S.sel.model !== id) S.sel = { model: id, color: colorsOf(id)[0], size: null, qty: 1 };
+  const fresh = !S.sel || S.sel.model !== id;
+  if (fresh) S.sel = { model: id, color: colorsOf(id)[0], size: null, qty: 1 };
+  const gal = photosOf(id);
+  let start = Number(document.documentElement.dataset.galIdx) || 0, go = '';
+  if (fresh) start = Math.max(0, photoIndexForColor(gal, S.sel.color));
+  if (S.galGo != null) { start = S.galFrom || 0; go = S.galGo; S.galGo = S.galFrom = null; }
+  start = Math.min(start, Math.max(0, gal.length - 1));
+  const galHtml = gal.length
+    ? `<div class="gal-wrap"><div class="gal" data-start="${start}" data-go="${go}">${gal.map((p, i) => `<figure class="slide" data-i="${i}"><div class="ph ph-fill" style="aspect-ratio:4/5">${phFill(p.url, p.thumb_url, { eager: i === start, alt: m.name + ' · photo ' + (i + 1) })}</div></figure>`).join('')}</div>${gal.length > 1 ? `<button class="gal-arrow prev" data-gal="-1" aria-label="Photo précédente">‹</button><button class="gal-arrow next" data-gal="1" aria-label="Photo suivante">›</button><div class="dots" aria-hidden="true">${gal.map(() => '<i></i>').join('')}</div>` : ''}</div>`
+    : phBox(null, 'aspect-ratio:4/5;border-radius:28px');
   const sizes = sizesOf(id, S.sel.color);
   if (!sizes.includes(S.sel.size)) S.sel.size = sizes[0] || null;
   return `<div class="pad">
     <a href="#/catalogue" class="back" style="position:static;margin-bottom:8px" aria-label="Retour">‹</a>
-    <div class="ph fit" style="min-height:230px;border-radius:28px">${img(photoOf(id, S.sel.color))}</div>
+    ${galHtml}
     <div class="row" style="align-items:flex-start;margin-top:16px"><div><div style="font-size:24px;font-weight:600;letter-spacing:-.5px">${esc(m.name)}</div><div class="mono" style="margin-top:6px">Réf. ${esc(m.ref || '—')}</div></div><b style="font-size:17px;margin-top:4px">${fcfa(m.price_fcfa)}</b></div>
     ${m.description ? `<p style="color:#3B4150;font-size:14px;line-height:1.5">${esc(m.description)}</p>` : ''}
     <div class="mono" style="margin-top:18px">Couleur · ${esc(S.sel.color)}</div>
@@ -65,7 +75,13 @@ routes.produit = async (id) => {
     </div>
     <div class="bar glass" style="bottom:90px;padding:10px;border-radius:30px;display:flex;align-items:center;gap:14px"><div style="padding-left:12px"><div class="mono">Total</div><b>${fcfa(m.price_fcfa * S.sel.qty)}</b></div><button class="btn" style="flex:1" data-act="addToCart">Ajouter au panier</button></div>`;
 };
-handlers.selColor = (el) => { S.sel.color = el.dataset.v; S.sel.size = null; render(true); };
+handlers.selColor = (el) => {
+  const from = Number(document.documentElement.dataset.galIdx) || 0;
+  S.sel.color = el.dataset.v; S.sel.size = null;
+  const i = photoIndexForColor(photosOf(S.sel.model), S.sel.color);
+  if (i >= 0) { S.galFrom = from; S.galGo = i; } // pas de photo de cette couleur : la galerie ne bouge pas
+  render(true);
+};
 handlers.selSize = (el) => { S.sel.size = Number(el.dataset.v); render(true); };
 handlers.selQtyInc = () => { S.sel.qty = Math.min(99, S.sel.qty + 1); render(true); };
 handlers.selQtyDec = () => { S.sel.qty = Math.max(1, S.sel.qty - 1); render(true); };
@@ -90,7 +106,7 @@ routes.panier = async () => {
   if (!items.length) return `<div class="pad"><h1 class="h1" style="margin-top:12px">Votre panier</h1><div class="glass" style="padding:18px;margin-top:16px">Votre panier est vide.</div><a class="btn" style="margin-top:16px;display:flex;align-items:center;justify-content:center" href="#/catalogue">Voir le catalogue</a></div>`;
   const price = (k) => fcfa(S.settings[k]);
   return `<div class="pad"><div class="mono">01 — Panier</div><h1 class="h1" style="margin-top:6px">Votre<br>panier</h1>
-    <div class="stack" style="margin-top:16px">${items.map((i, n) => `<div class="glass" style="padding:12px;display:flex;gap:12px;align-items:center"><div class="ph" style="width:64px;height:64px;border-radius:16px;flex:none">${img(photoOf(i.modelId, i.color))}</div><div style="flex:1"><div style="font-size:15px;font-weight:600">${esc(i.name)}</div><div class="mono" style="margin-top:4px">${esc(i.color)} · ${esc(i.size)}</div><b style="font-size:13px">${fcfa(i.price)}</b></div><div><div class="row" style="justify-content:flex-end">${stepper('cartDec', 'cartInc', i.qty, `data-i="${n}"`)}</div><button class="chip" style="height:32px;margin-top:6px;font-size:12px" data-act="cartDel" data-i="${n}">Retirer</button></div></div>`).join('')}</div>
+    <div class="stack" style="margin-top:16px">${items.map((i, n) => `<div class="glass" style="padding:12px;display:flex;gap:12px;align-items:center">${phBox(pickPhoto(i.modelId, i.color), 'width:64px;height:64px;border-radius:16px;flex:none')}<div style="flex:1"><div style="font-size:15px;font-weight:600">${esc(i.name)}</div><div class="mono" style="margin-top:4px">${esc(i.color)} · ${esc(i.size)}</div><b style="font-size:13px">${fcfa(i.price)}</b></div><div><div class="row" style="justify-content:flex-end">${stepper('cartDec', 'cartInc', i.qty, `data-i="${n}"`)}</div><button class="chip" style="height:32px;margin-top:6px;font-size:12px" data-act="cartDel" data-i="${n}">Retirer</button></div></div>`).join('')}</div>
     <div class="sec">Préparation</div>
     <div class="row" style="gap:10px"><button class="chip big" style="flex:1" aria-pressed="${S.cart.carton}" data-act="setCarton" data-v="1">Avec carton</button><button class="chip big" style="flex:1" aria-pressed="${!S.cart.carton}" data-act="setCarton" data-v="0">Sans carton</button></div>
     <div style="font-size:12px;color:#667085;margin-top:8px">Carton inclus, sans supplément.</div>

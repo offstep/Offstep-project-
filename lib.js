@@ -72,17 +72,47 @@ export const uuid = () => (globalThis.crypto && crypto.randomUUID ? crypto.rando
 
 // Couleurs : accepte les noms français ou anglais, avec ou sans accents ; « Noir/Blanc » donne un dégradé
 export const strip = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
-const COLORS = { noir: '#0A0C14', blanc: '#FFFFFF', marron: '#7A5230', brun: '#7A5230', rouge: '#C0392B', bleu: '#1F4E9C', 'bleu marine': '#14264F', 'bleu ciel': '#7EC8E3', beige: '#D9C7A3', creme: '#F3EBD3', gris: '#9AA0AE', 'gris clair': '#D0D3DA', 'gris fonce': '#4B5060', vert: '#2E7D32', 'vert fonce': '#1B4D2B', kaki: '#8A8B4A', jaune: '#F2C200', moutarde: '#D9A400', rose: '#E88DB4', fuchsia: '#C2185B', orange: '#E67E22', violet: '#6A3FA0', mauve: '#B08AC9', turquoise: '#1ABC9C', bordeaux: '#6D1A2B', camel: '#C19A6B', dore: '#C9A227', or: '#C9A227', argent: '#C0C4CC', argente: '#C0C4CC', black: '#0A0C14', white: '#FFFFFF', brown: '#7A5230', red: '#C0392B', blue: '#1F4E9C', green: '#2E7D32', yellow: '#F2C200', gray: '#9AA0AE', grey: '#9AA0AE', pink: '#E88DB4', gold: '#C9A227', silver: '#C0C4CC' };
-export function colorCss(name, custom = {}) {
-  const k = strip(name);
+const COLORS = { noir: '#0A0C14', blanc: '#FFFFFF', marron: '#7A5230', brun: '#7A5230', rouge: '#C0392B', bleu: '#1F4E9C', 'bleu marine': '#14264F', 'bleu ciel': '#7EC8E3', beige: '#D9C7A3', creme: '#F3EBD3', gris: '#9AA0AE', 'gris clair': '#D0D3DA', 'gris fonce': '#4B5060', vert: '#2E7D32', 'vert fonce': '#1B4D2B', kaki: '#8A8B4A', jaune: '#F2C200', moutarde: '#D9A400', rose: '#E88DB4', fuchsia: '#C2185B', orange: '#E67E22', violet: '#6A3FA0', mauve: '#B08AC9', turquoise: '#1ABC9C', bordeaux: '#6D1A2B', camel: '#C19A6B', dore: '#C9A227', or: '#C9A227', argent: '#C0C4CC', argente: '#C0C4CC', black: '#0A0C14', white: '#FFFFFF', brown: '#7A5230', red: '#C0392B', blue: '#1F4E9C', green: '#2E7D32', yellow: '#F2C200', gray: '#9AA0AE', grey: '#9AA0AE', pink: '#E88DB4', gold: '#C9A227', silver: '#C0C4CC', 'bleu roi': '#2354C8', marine: '#14264F', ciel: '#7EC8E3', 'blanc casse': '#F5F1E6', ecru: '#EFE8D6', saumon: '#F4978E', 'vert olive': '#6B7A2F', olive: '#6B7A2F', navy: '#14264F', multicolore: 'conic-gradient(#E74C3C, #F2C200, #2E7D32, #1F4E9C, #6A3FA0, #E74C3C)', multi: 'conic-gradient(#E74C3C, #F2C200, #2E7D32, #1F4E9C, #6A3FA0, #E74C3C)' };
+const mixHex = (h, t, k) => { const A = [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)), B = [1, 3, 5].map((i) => parseInt(t.slice(i, i + 2), 16)); return '#' + A.map((v, i) => Math.round(v + (B[i] - v) * k).toString(16).padStart(2, '0')).join('').toUpperCase(); };
+const norm = (s) => strip(s).replace(/[-_.]+/g, ' ').replace(/\s+/g, ' ');
+// Renvoie une couleur CSS, ou null si le nom n'est ni dans la table ni dans le lexique
+function resolveColor(name, custom = {}) {
+  const raw = strip(name), k = norm(name);
+  if (!k) return null;
+  if (custom[raw]) return custom[raw];
   if (custom[k]) return custom[k];
   if (COLORS[k]) return COLORS[k];
-  if (k.includes('/')) {
-    const p = k.split('/').map((x) => colorCss(x, custom));
-    return `linear-gradient(135deg, ${p[0]} 50%, ${p[1]} 50%)`;
+  const sp = raw.split(/\s*(?:\/|&|\+|\bet\b)\s*/).filter(Boolean);
+  if (sp.length > 1) {
+    const p = sp.map((x) => resolveColor(x, custom));
+    if (p.some((x) => !x)) return null;
+    if (p.length === 2) return `linear-gradient(135deg, ${p[0]} 50%, ${p[1]} 50%)`;
+    return `linear-gradient(135deg, ${p.map((c, i) => `${c} ${Math.round((i * 100) / p.length)}% ${Math.round(((i + 1) * 100) / p.length)}%`).join(', ')})`;
   }
+  const m = k.match(/^(.+) (clair|fonce)$/);
+  if (m) { const base = resolveColor(m[1], custom); if (/^#[0-9a-f]{6}$/i.test(base || '')) return m[2] === 'fonce' ? mixHex(base, '#000000', 0.35) : mixHex(base, '#FFFFFF', 0.4); }
   if (typeof CSS !== 'undefined' && CSS.supports && CSS.supports('color', k)) return k;
-  return '#C9CDD6';
+  return null;
+}
+export const colorCss = (name, custom = {}) => resolveColor(name, custom) || '#C9CDD6';
+export const isKnownColor = (name, custom = {}) => resolveColor(name, custom) !== null;
+
+// Marques : « Nike », « nike » et « NIKE » comptent pour une seule (casse, accents et espaces ignorés)
+export const BRANDS = ['Nike', 'Adidas', 'Jordan', 'New Balance', 'Puma', 'Reebok', 'Converse', 'Vans', 'Asics', 'Autre'];
+export const brandKey = (s) => strip(s).replace(/[^a-z0-9]+/g, '');
+export function uniqueBrands(list) {
+  const seen = new Map();
+  for (const b of list || []) { const t = String(b || '').trim().replace(/\s+/g, ' '), k = brandKey(t); if (k && !seen.has(k)) seen.set(k, t); }
+  return [...seen.values()];
+}
+
+// Photos : tri par position (puis ordre reçu), index de la 1re photo d'une couleur, rendu « cadre plein »
+export const sortPhotos = (list) => (list || []).map((p, i) => [p, i]).sort((a, b) => ((a[0].position || 0) - (b[0].position || 0)) || (a[1] - b[1])).map((x) => x[0]);
+export const photoIndexForColor = (photos, color) => (photos || []).findIndex((p) => p.color && strip(p.color) === strip(color));
+export function phFill(url, thumb, o = {}) {
+  if (!url) return '';
+  const lz = o.eager ? 'eager' : 'lazy';
+  return `<img class="pf-bg" src="${esc(thumb || url)}" alt="" aria-hidden="true" loading="${lz}" decoding="async"><img class="pf-fg" src="${esc(url)}" alt="${esc(o.alt || '')}" loading="${lz}" decoding="async">`;
 }
 
 // Bloc de texte -> modèles, couleurs, pointures et quantités
