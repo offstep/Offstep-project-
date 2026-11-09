@@ -133,7 +133,7 @@ input[type=file]{display:none}
 /* Effet « lac » : seuls transform et opacity bougent ; 12 éléments au plus (voir fx.js) */
 @keyframes fl{0%,100%{transform:translateY(2px)}50%{transform:translateY(-3px)}}
 @keyframes fls{0%,100%{transform:scaleX(1);opacity:.5}50%{transform:scaleX(.8);opacity:.26}}
-@keyframes drift{to{transform:translate3d(8%,3%,0)}}
+@keyframes drift{to{transform:translate3d(8%,0,0)}}
 @keyframes rp{to{transform:scale(1);opacity:0}}
 .fl.in-view{animation:fl 6.5s ease-in-out infinite;animation-delay:calc(var(--i,0)*-.7s)}
 .card::after,.gal-wrap::after{content:"";position:absolute;left:14%;right:14%;bottom:-13px;height:16px;border-radius:50%;background:radial-gradient(closest-side,rgba(10,12,20,.34),transparent);z-index:-1;pointer-events:none;opacity:.5}
@@ -141,7 +141,7 @@ input[type=file]{display:none}
 @supports (-webkit-box-reflect:below 0){
   .pad>.btn,.pad>a.btn{-webkit-box-reflect:below 2px linear-gradient(transparent 72%,rgba(255,255,255,.28))}
 }
-.app::after{content:"";position:absolute;inset:-10% -25%;z-index:-1;pointer-events:none;background:radial-gradient(38% 22% at 25% 18%,rgba(124,196,255,.17),transparent 70%),radial-gradient(30% 20% at 80% 45%,rgba(59,130,246,.10),transparent 70%),radial-gradient(34% 22% at 30% 85%,rgba(124,196,255,.13),transparent 70%);animation:drift 60s ease-in-out infinite alternate}
+.app::after{content:"";position:absolute;inset:0 -25%;z-index:-1;pointer-events:none;background:radial-gradient(38% 22% at 25% 18%,rgba(124,196,255,.17),transparent 70%),radial-gradient(30% 20% at 80% 45%,rgba(59,130,246,.10),transparent 70%),radial-gradient(34% 22% at 30% 85%,rgba(124,196,255,.13),transparent 70%);animation:drift 60s ease-in-out infinite alternate}
 .rw{position:absolute;inset:0;border-radius:inherit;overflow:hidden;pointer-events:none}
 .rw i{position:absolute;left:calc(var(--x) - var(--d)/2);top:calc(var(--y) - var(--d)/2);width:var(--d);height:var(--d);border-radius:50%;border:2px solid rgba(124,196,255,.85);transform:scale(.1);opacity:.9;animation:rp .8s ease-out forwards}
 .rw i:nth-child(2){animation-delay:.12s}.rw i:nth-child(3){animation-delay:.24s}
@@ -222,3 +222,13 @@ select.inp{appearance:auto;padding:0 12px}
 .pk.off{opacity:.5}
 .pk input{width:22px;height:22px;flex:none}
 .vthumb{width:72px;height:72px;border-radius:16px;flex:none}
+
+/* ===== LOT H : cloche, notifications, images de commande ===== */
+.hdr-s,.hdr-r{width:138px}
+.notif{display:block;padding:14px 16px;color:#0A0C14}
+.notif.unread{border-left:4px solid var(--aq2)}
+.notif.unread b::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--aqg);margin-right:8px}
+.vis-t{border:0;background:none;padding:0;text-align:left;flex:0 0 auto;color:inherit}
+
+/* ===== CORRECTIF : la page doit défiler jusqu'au bout (plus de zone de défilement imbriquée) ===== */
+.app{overflow-x:clip}
