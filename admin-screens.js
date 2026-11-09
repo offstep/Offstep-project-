@@ -4,6 +4,9 @@ NAVCONF.group.import = 'plus';
 NAVCONF.group.couleurs = 'plus';
 NAVCONF.group.vitrine = 'plus';
 import './admin-vitrine.js';
+import './notifications.js';
+import { orderVisuals } from './admin-order-visuals.js';
+import { shrinkBoth as shrink } from './img-shrink.js';
 
 const must = (r) => { if (r.error) throw r.error; return r.data; };
 const tag = (kind, v) => `<span class="tag ${['paye', 'livree', 'terminee', 'confirmee'].includes(v) ? 'dark' : ''}">${esc(label(kind, v))}</span>`;
@@ -116,10 +119,12 @@ routes.commande = async (id) => {
   const w = (await names([o.reseller_id]))[o.reseller_id] || {};
   const pay = pays[0], col = cols[0];
   const bn = (bs.find((b) => b.id === o.boutique_id) || {}).name || '';
+  const vis = await orderVisuals({ o, w, items, opts, vs, ms, pays, bn, vname });
   const cancellable = ['a_preparer', 'prete', 'en_attente_retrait'].includes(o.delivery_status) && !['annulee', 'refusee', 'terminee'].includes(o.status);
   const act = (a, text, cls = 'btn2') => `<button class="${cls}" data-act="${a}" data-order="${o.id}">${text}</button>`;
   return `<div class="pad">${back('commandes')}<div class="mono">Commande</div><h1 class="h1" style="font-size:30px;margin-top:6px">N° ${esc(o.number)}</h1>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px">${tag('commande', o.status)}${tag('livraison', o.delivery_status)}${tag('paiement', o.payment_status)}${o.needs_review ? '<span class="tag dark">À vérifier</span>' : ''}</div>
+    ${vis}
     <div class="sec">Articles</div>
     <div class="glass" style="padding:6px 18px">${items.map((i) => `<div class="kv"><span>Demandé : ${esc(vname(i.variant_requested))}${i.substituted ? `<br><b>À sortir : ${esc(vname(i.variant_assigned))}</b> <span class="tag dark">Remplacement</span>` : ''}</span><b>× ${i.qty}</b></div>`).join('')}${opts.map((x) => `<div class="kv"><span>${esc(x.kind)} ${esc(x.color || '')} ${esc(x.subtype || '')}</span><b>× ${x.qty}</b></div>`).join('')}<div class="kv"><span>Carton</span><b>${o.carton ? 'Oui' : 'Non'}</b></div></div>
     <div class="sec">Livraison</div>
@@ -259,18 +264,6 @@ function photoManager(photos, vars, e) {
     <label class="mono" for="e_photoColor">Couleur des nouvelles photos</label><select class="inp" id="e_photoColor" data-bind="edit.photoColor">${opts(e.photoColor)}</select>
     <label class="drop" style="margin-top:10px;cursor:pointer" for="photoFile">Ajouter des photos (plusieurs à la fois)</label><input id="photoFile" type="file" accept="image/*" multiple data-change-act="uploadPhotos">
     <div class="pbar" aria-hidden="true"><i id="upbar"></i></div>`;
-}
-// Réduction avant envoi : 1 600 px max (JPEG 0,82) + miniature 480 px
-async function shrink(file) {
-  let bmp;
-  try { bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }); } catch { throw new Error('Photo illisible (format non pris en charge, par exemple HEIC). Utilisez JPEG ou PNG.'); }
-  const make = (max, q) => new Promise((ok, ko) => {
-    const k = Math.min(1, max / Math.max(bmp.width, bmp.height)), c = document.createElement('canvas');
-    c.width = Math.max(1, Math.round(bmp.width * k)); c.height = Math.max(1, Math.round(bmp.height * k));
-    const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); x.drawImage(bmp, 0, 0, c.width, c.height);
-    c.toBlob((b) => (b ? ok(b) : ko(new Error('Photo illisible.'))), 'image/jpeg', q);
-  });
-  try { return { full: await make(1600, 0.82), thumb: await make(480, 0.8) }; } finally { if (bmp.close) bmp.close(); }
 }
 handlers.uploadPhotos = (el) => once('photo', async () => {
   const e = S.edit;

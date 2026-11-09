@@ -2,6 +2,7 @@
 import { sb, S, routes, handlers, go, render, toast, once } from './core.js';
 import { esc, strip, uniqueBrands, phFill } from './lib.js';
 import { KINDS, KIND_ORDER, renderBlock, makeCtx, validateBlock } from './home-blocks.js';
+import { shrink } from './img-shrink.js';
 
 const must = (r) => { if (r.error) throw r.error; return r.data; };
 const back = (to) => `<a href="#/${to}" aria-label="Retour" style="display:inline-block;font-size:28px;min-height:44px">‹</a>`;
@@ -124,17 +125,6 @@ handlers.vbModel = (el) => {
 };
 handlers.vbBrand = (el) => { const l = S.vb.payload.brands, v = el.dataset.v, i = l.indexOf(v); if (el.checked && i < 0) l.push(v); else if (!el.checked && i >= 0) l.splice(i, 1); preview(); };
 
-// Réduction avant envoi : côté 1 600 px au plus, JPEG 0,82
-async function shrink(file) {
-  let bmp;
-  try { bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }); } catch { throw new Error('Image illisible (format non pris en charge, par exemple HEIC). Utilisez JPEG ou PNG.'); }
-  try {
-    const k = Math.min(1, 1600 / Math.max(bmp.width, bmp.height)), c = document.createElement('canvas');
-    c.width = Math.max(1, Math.round(bmp.width * k)); c.height = Math.max(1, Math.round(bmp.height * k));
-    const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); x.drawImage(bmp, 0, 0, c.width, c.height);
-    return await new Promise((ok, ko) => c.toBlob((bl) => (bl ? ok(bl) : ko(new Error('Image illisible.'))), 'image/jpeg', 0.82));
-  } finally { if (bmp.close) bmp.close(); }
-}
 handlers.vbUpload = (el) => once('vbup', async () => {
   const f = el.files && el.files[0]; if (!f) return;
   const path = el.dataset.path; el.value = '';
