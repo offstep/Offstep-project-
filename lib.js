@@ -189,3 +189,28 @@ export function searchPhotos(cat, q) {
   if (!exact.length && !brands.length && sizes.length) groups.push({ id: 'sizes', title: "Ce modèle existe en d'autres pointures", items: sizes.sort(order) });
   return { colorLabel, groups };
 }
+
+// ───────── Catégories : arbre à 2 niveaux, limité aux catégories qui contiennent des modèles publiés
+export function categoryTree(cats, links) {
+  const has = new Map();
+  for (const l of links || []) { if (!has.has(l.category_id)) has.set(l.category_id, new Set()); has.get(l.category_id).add(l.model_id); }
+  const kids = (p) => (cats || []).filter((c) => (c.parent_id || null) === p).sort((a, b) => ((a.position || 0) - (b.position || 0)) || String(a.name).localeCompare(String(b.name), 'fr'));
+  return kids(null).map((c) => {
+    const subs = kids(c.id).map((s) => ({ ...s, models: [...(has.get(s.id) || [])] })).filter((s) => s.models.length);
+    return { ...c, subs, models: [...new Set([...(has.get(c.id) || []), ...subs.flatMap((s) => s.models)])] };
+  }).filter((c) => c.models.length);
+}
+export const modelsOfCategory = (tree, id) => {
+  for (const c of tree) { if (c.id === id) return new Set(c.models); const s = c.subs.find((x) => x.id === id); if (s) return new Set(s.models); }
+  return null;
+};
+
+// Catégories d'une marque (celles qui ont des modèles publiés), triées par nom
+export function linesOfBrand(cats, links, brand) {
+  const bk = brandKey(brand);
+  if (!bk) return [];
+  const by = new Map();
+  for (const l of links || []) { if (!by.has(l.category_id)) by.set(l.category_id, new Set()); by.get(l.category_id).add(l.model_id); }
+  return (cats || []).filter((c) => brandKey(c.brand) === bk).map((c) => ({ id: c.id, name: c.name, models: [...(by.get(c.id) || [])] })).filter((c) => c.models.length)
+    .sort((a, b) => String(a.name).localeCompare(String(b.name), 'fr', { numeric: true }));
+}

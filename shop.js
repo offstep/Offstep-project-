@@ -1,18 +1,20 @@
 import { sb, S, routes, handlers, persist, go, render, toast, stepper, hex } from './core.js';
-import { esc, fcfa, cartTotals, estimateFee, planActive, strip, brandKey, uniqueBrands, phFill, sortPhotos, photoIndexForColor } from './lib.js';
+import { esc, fcfa, cartTotals, estimateFee, planActive, strip, brandKey, uniqueBrands, phFill, sortPhotos, photoIndexForColor, linesOfBrand } from './lib.js';
 import { SOCKS_COLORS, SOCKS_LONG_BRANDS, LACES_COLORS } from './config.js';
 
 export async function ensureCatalogue() {
   if (S.catalogue) return S.catalogue;
-  const [m, v, p, k] = await Promise.all([
+  const [m, v, p, k, cg, cl] = await Promise.all([
     sb.from('catalogue').select('*').order('name'),
     sb.from('catalogue_variants').select('*'),
     sb.from('catalogue_photos').select('*'),
     sb.from('colors').select('*'),
+    sb.from('catalogue_categories').select('*'), // catégories : si le script SQL étape 19 n'est pas lancé, simplement vides
+    sb.from('catalogue_model_categories').select('*'),
   ]);
   for (const r of [m, v, p]) if (r.error) throw r.error;
   S.colorHex = Object.fromEntries((k.data || []).map((x) => [strip(x.name), x.hex]));
-  S.catalogue = { models: m.data || [], variants: v.data || [], photos: sortPhotos(p.data || []) };
+  S.catalogue = { models: m.data || [], variants: v.data || [], photos: sortPhotos(p.data || []), cats: cg.data || [], links: cl.data || [] };
   return S.catalogue;
 }
 export const colorsOf = (id) => [...new Set(S.catalogue.variants.filter((v) => v.model_id === id).map((v) => v.color))];
@@ -24,8 +26,8 @@ export const photoOf = (id, color) => (pickPhoto(id, color) || {}).url || '';
 const phBox = (p, style = '', alt = '') => `<div class="ph ph-fill" style="${style}">${p ? phFill(p.url, p.thumb_url, { alt }) : 'Photo'}</div>`;
 
 function gridHtml() {
-  const q = strip(S.q), bk = brandKey(S.cat);
-  const list = S.catalogue.models.filter((m) => (!bk || brandKey(m.category) === bk) && (!q || strip(m.name + ' ' + (m.ref || '') + ' ' + (m.category || '')).includes(q)));
+  const q = strip(S.q), bk = brandKey(S.cat), inCat = S.catId ? new Set((S.catalogue.links || []).filter((l) => l.category_id === S.catId).map((l) => l.model_id)) : null;
+  const list = S.catalogue.models.filter((m) => (!bk || brandKey(m.category) === bk) && (!inCat || inCat.has(m.model_id)) && (!q || strip(m.name + ' ' + (m.ref || '') + ' ' + (m.category || '')).includes(q)));
   if (!list.length) return '<div class="glass" style="padding:18px;grid-column:1/-1">Aucun modèle trouvé.</div>';
   return list.map((m) => `<a class="glass card" href="#/produit/${m.model_id}">
     ${phBox(pickPhoto(m.model_id, colorsOf(m.model_id)[0]), 'aspect-ratio:4/5;border-radius:20px', m.name)}
@@ -38,13 +40,17 @@ routes.catalogue = async (brand) => {
   if (brand && S.catArg !== brand) { S.cat = brand; S.catArg = brand; } else if (!brand) S.catArg = null; // #/catalogue/<marque> (depuis l'accueil)
   const c = await ensureCatalogue();
   const cats = uniqueBrands(c.models.map((m) => m.category));
+  const lines = linesOfBrand(c.cats, c.links, S.cat);
+  if (S.catId && !lines.some((x) => x.id === S.catId)) S.catId = null;
   return `<div class="pad">
     <input class="inp" type="search" aria-label="Rechercher" placeholder="Rechercher un modèle ou une marque…" value="${esc(S.q)}" data-input-act="search">
-    <div class="chips" role="group" aria-label="Marques"><button class="chip" aria-pressed="${!brandKey(S.cat)}" data-act="setCat" data-v="">Tous</button>${cats.map((k) => `<button class="chip" aria-pressed="${brandKey(S.cat) === brandKey(k)}" data-act="setCat" data-v="${esc(k)}">${esc(k)}</button>`).join('')}</div>
+    ${cats.length ? `<div class="chips" role="group" aria-label="Marques"><button class="chip" aria-pressed="${!brandKey(S.cat)}" data-act="setCat" data-v="">Toutes les marques</button>${cats.map((k) => `<button class="chip" aria-pressed="${brandKey(S.cat) === brandKey(k)}" data-act="setCat" data-v="${esc(k)}">${esc(k)}</button>`).join('')}</div>` : ''}
+    ${lines.length ? `<div class="chips" role="group" aria-label="Catégories de ${esc(S.cat)}"><button class="chip" aria-pressed="${!S.catId}" data-act="setCategory" data-v="">Tout ${esc(S.cat)}</button>${lines.map((c) => `<button class="chip" aria-pressed="${S.catId === c.id}" data-act="setCategory" data-v="${c.id}">${esc(c.name)}</button>`).join('')}</div>` : ''}
     <div class="grid2" id="grid">${gridHtml()}</div></div>`;
 };
 handlers.search = (el) => { S.q = el.value; document.getElementById('grid').innerHTML = gridHtml(); };
-handlers.setCat = (el) => { S.cat = el.dataset.v; render(true); };
+handlers.setCat = (el) => { S.cat = el.dataset.v; S.catId = null; render(true); };
+handlers.setCategory = (el) => { S.catId = Number(el.dataset.v) || null; render(true); };
 
 routes.produit = async (id) => {
   const c = await ensureCatalogue();

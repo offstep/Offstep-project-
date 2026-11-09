@@ -3,6 +3,8 @@ import { esc, fcfa, label, fmtDate, parseStockBlock, strip, brandKey, uniqueBran
 NAVCONF.group.import = 'plus';
 NAVCONF.group.couleurs = 'plus';
 NAVCONF.group.vitrine = 'plus';
+NAVCONF.group.categories = 'plus';
+import { autoClassifyQuiet } from './admin-categories.js';
 import './admin-vitrine.js';
 import './notifications.js';
 import { orderVisuals } from './admin-order-visuals.js';
@@ -220,13 +222,17 @@ routes.produit = async (id) => {
     vars = must(await sb.from('variants').select('*').eq('model_id', m.id));
     photos = sortPhotos(must(await sb.from('model_photos').select('*').eq('model_id', m.id)));
   }
-  const brandList = uniqueBrands([...must(await sb.from('models').select('category')).map((x) => x.category), ...BRANDS]);
+  const soft = async (q) => { try { const r = await q; return r.error ? [] : r.data || []; } catch { return []; } }; // tables de l'étape 19 : vides si le SQL n'est pas lancé
+  const [dbBrands, catRows] = [await soft(sb.from('brands').select('name').order('name')), await soft(sb.from('categories').select('id,name,parent_id').order('name'))];
+  const brandList = uniqueBrands([...dbBrands.map((x) => x.name), ...must(await sb.from('models').select('category')).map((x) => x.category), ...BRANDS]);
   if (!S.edit || S.edit.key !== String(id)) S.edit = { key: String(id), id: isNew ? null : m.id, name: m.name || '', ref: m.ref || '', category: m.category || '', description: m.description || '', price: m.price_fcfa ?? '', published: isNew ? true : m.published, colors: '', sizes: '', photoColor: '' };
   const e = S.edit;
   const fld = (k, l, type = 'text') => `<label class="mono" for="e_${k}">${l}</label><input class="inp" id="e_${k}" type="${type}" value="${esc(e[k])}" data-bind="edit.${k}">`;
+  const catOpts = catRows.filter((c) => !c.parent_id).map((t) => `<option value="${t.id}" ${String(e.category_id) === String(t.id) ? 'selected' : ''}>${esc(t.name)}</option>` + catRows.filter((s) => s.parent_id === t.id).map((s) => `<option value="${s.id}" ${String(e.category_id) === String(s.id) ? 'selected' : ''}>${esc(t.name)} › ${esc(s.name)}</option>`).join('')).join('');
+  const catFld = catRows.length ? `<label class="mono" for="e_category_id">Catégorie</label><select class="inp" id="e_category_id" data-bind="edit.category_id"><option value="">Aucune</option>${catOpts}</select>` : '';
   const brandFld = `<label class="mono" for="e_category">Marque</label><input class="inp" id="e_category" list="brands" autocomplete="off" value="${esc(e.category)}" data-bind="edit.category"><datalist id="brands">${brandList.map((b) => `<option value="${esc(b)}"></option>`).join('')}</datalist>`;
   return `<div class="pad">${back('produits')}<div class="mono">Modèle</div><h1 class="h1" style="font-size:30px;margin-top:6px">${esc(e.name || 'Nouveau modèle')}</h1>
-    ${fld('name', 'Nom du modèle')}${fld('ref', 'Référence interne')}${brandFld}${fld('price', 'Prix, identique pour tous (FCFA)', 'number')}
+    ${fld('name', 'Nom du modèle')}${fld('ref', 'Référence interne')}${brandFld}${catFld}${fld('price', 'Prix, identique pour tous (FCFA)', 'number')}
     <label class="mono" for="e_description">Description</label><textarea class="inp" id="e_description" style="height:90px;padding:14px 16px;resize:none" data-bind="edit.description">${esc(e.description)}</textarea>
     <div class="glass" style="margin-top:14px;padding:0 18px;display:flex;align-items:center;justify-content:space-between;min-height:64px"><div><div class="t1">Publié</div><div class="t2">Visible dans le catalogue</div></div><button class="chip" aria-pressed="${e.published}" data-act="togglePub">${e.published ? 'Oui' : 'Non'}</button></div>
     <div class="sec">Ajouter des variantes</div>
@@ -244,13 +250,14 @@ handlers.saveModel = () => once('save', async () => {
   if (isNaN(price) || price < 0) throw new Error('Prix invalide.');
   const known = uniqueBrands(must(await sb.from('models').select('category')).map((x) => x.category)), typed = (e.category || '').trim().replace(/\s+/g, ' ');
   e.category = known.find((b) => brandKey(b) === brandKey(typed)) || typed;
-  const row = { name: e.name.trim(), ref: e.ref || null, category: e.category || null, description: e.description || null, price_fcfa: price, published: e.published };
+  const row = { name: e.name.trim(), ref: e.ref || null, category: e.category || null, ...('category_id' in e ? { category_id: e.category_id ? Number(e.category_id) : null } : {}), description: e.description || null, price_fcfa: price, published: e.published };
   let id = e.id;
   if (id) must(await sb.from('models').update(row).eq('id', id));
   else id = must(await sb.from('models').insert(row).select('id').single()).id;
   const colors = e.colors.split(',').map((x) => x.trim()).filter(Boolean);
   const sizes = e.sizes.split(',').map((x) => parseInt(x, 10)).filter((n) => !isNaN(n));
   if (colors.length && sizes.length) must(await sb.rpc('create_variants_for_model', { p_model: id, p_colors: colors, p_sizes: sizes }));
+  await autoClassifyQuiet({ ids: [id] }); // marque et catégorie déduites du nom, si elles manquent
   S.edit = null; toast('Modèle enregistré');
   if (location.hash === '#/produit/' + id) await render(); else go('/produit/' + id);
 });
@@ -362,7 +369,7 @@ routes.reversements = async () => {
 // ───────── Plus
 routes.plus = async () => `<div class="pad">${title('Plus', 'Gestion de la plateforme')}
   <div class="glass" style="padding:0 18px;margin-top:16px">
-    ${[['produits', 'Produits et variantes', 'Modèles, couleurs, pointures, photos'], ['livreurs', 'Livreurs', 'Ajouter et gérer les livreurs'], ['reversements', 'Reversements', 'Sommes encaissées par les livreurs'], ['couleurs', 'Couleurs', 'Teintes des pastilles'], ['vitrine', 'Vitrine', 'Accueil des revendeurs']].map(([k, t, d], i) => `<a class="row" style="min-height:72px;${i ? 'border-top:1px solid rgba(10,12,20,.07)' : ''}" href="#/${k}"><span><span class="t1">${t}</span><span class="t2">${d}</span></span><span>›</span></a>`).join('')}
+    ${[['produits', 'Produits et variantes', 'Modèles, couleurs, pointures, photos'], ['livreurs', 'Livreurs', 'Ajouter et gérer les livreurs'], ['reversements', 'Reversements', 'Sommes encaissées par les livreurs'], ['couleurs', 'Couleurs', 'Teintes des pastilles'], ['vitrine', 'Vitrine', 'Accueil des revendeurs'], ['categories', 'Catégories', 'Marques et catégories, classées automatiquement']].map(([k, t, d], i) => `<a class="row" style="min-height:72px;${i ? 'border-top:1px solid rgba(10,12,20,.07)' : ''}" href="#/${k}"><span><span class="t1">${t}</span><span class="t2">${d}</span></span><span>›</span></a>`).join('')}
     ${[['Revendeurs', 'Comptes et abonnements'], ['Zones et frais de livraison', 'Quartiers et tarifs'], ['Utilisateurs et horaires', 'Boutiques, administrateurs, équipe'], ['Réglages', 'Prix, bêta, priorité de substitution']].map(([t, d]) => `<div class="row" style="min-height:72px;border-top:1px solid rgba(10,12,20,.07);opacity:.5"><span><span class="t1">${t}</span><span class="t2">${d} · bientôt</span></span></div>`).join('')}</div>
   <button class="btn2" style="margin-top:22px" data-act="logout">Se déconnecter</button></div>`;
 
@@ -403,5 +410,6 @@ handlers.impCreate = () => once('imp', async () => {
   if (errors.length || !models.length) throw new Error('Corrigez les erreurs avant de créer.');
   const r = must(await sb.rpc('import_stock', { p_boutique: S.imp.boutique, p_mode: S.imp.mode, p_data: models }));
   toast(`${r.models_created} modèle(s) créé(s) · ${r.variants_created} variante(s) · ${r.units} paire(s)`);
+  await autoClassifyQuiet(); // nouveaux modèles : marque et catégorie déduites des noms
   S.imp.text = ''; go('/produits');
 });
