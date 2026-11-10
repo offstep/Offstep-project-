@@ -214,3 +214,21 @@ export function linesOfBrand(cats, links, brand) {
   return (cats || []).filter((c) => brandKey(c.brand) === bk).map((c) => ({ id: c.id, name: c.name, models: [...(by.get(c.id) || [])] })).filter((c) => c.models.length)
     .sort((a, b) => String(a.name).localeCompare(String(b.name), 'fr', { numeric: true }));
 }
+
+// ───────── Import de stock : un modèle = un nom ET un prix (même règle que import_stock côté serveur)
+// existing = [{ id, name, price_fcfa }] → pour chaque modèle de la liste : new | add | separate | error
+export function planImport(models, existing) {
+  const known = (existing || []).map((m) => ({ name: String(m.name || '').toLowerCase(), price: m.price_fcfa == null ? null : Number(m.price_fcfa) }));
+  return (models || []).map((m) => {
+    const nm = String(m.name || '').toLowerCase(), price = m.price == null ? null : Number(m.price), same = known.filter((k) => k.name === nm);
+    if (price != null) {
+      if (same.some((k) => k.price === price)) return { action: 'add', note: 'Ajouté au modèle existant à ce prix' };
+      known.push({ name: nm, price });
+      if (same.length) return { action: 'separate', note: `Nouveau modèle séparé (il existe déjà à ${same.map((k) => fcfa(k.price)).join(' et ')})` };
+      return { action: 'new', note: 'Nouveau modèle' };
+    }
+    if (same.length === 1) return { action: 'add', note: 'Ajouté au modèle existant' };
+    if (same.length > 1) return { action: 'error', note: `Plusieurs modèles à des prix différents : indiquez le prix` };
+    return { action: 'error', note: 'Prix requis pour un nouveau modèle' };
+  });
+}

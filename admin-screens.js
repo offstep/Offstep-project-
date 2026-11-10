@@ -1,10 +1,11 @@
 import { sb, S, routes, handlers, go, render, toast, once, copyText, NAVCONF, hex } from './core.js';
-import { esc, fcfa, label, fmtDate, parseStockBlock, strip, brandKey, uniqueBrands, BRANDS, sortPhotos, phFill, isKnownColor } from './lib.js';
+import { esc, fcfa, label, fmtDate, parseStockBlock, planImport, strip, brandKey, uniqueBrands, BRANDS, sortPhotos, phFill, isKnownColor } from './lib.js';
 NAVCONF.group.import = 'plus';
 NAVCONF.group.couleurs = 'plus';
 NAVCONF.group.vitrine = 'plus';
 NAVCONF.group.categories = 'plus';
 import { autoClassifyQuiet } from './admin-categories.js';
+import { splitSection, setSplitVars } from './admin-split.js';
 import './admin-vitrine.js';
 import './notifications.js';
 import { orderVisuals } from './admin-order-visuals.js';
@@ -239,7 +240,7 @@ routes.produit = async (id) => {
     <div style="font-size:13px;color:#667085;line-height:1.4">Séparez par des virgules. Chaque couleur × pointure crée une variante, à 0 en stock dans les 3 boutiques.</div>
     ${fld('colors', 'Couleurs (ex : Noir, Blanc)')}${fld('sizes', 'Pointures (ex : 40, 41, 42)')}
     ${vars.length ? `<div style="font-size:13px;color:#667085;margin-top:10px">${vars.length} variante(s) existante(s) : ${[...new Set(vars.map((v) => v.color))].map(esc).join(', ')}</div>` : ''}
-    ${isNew ? '<div style="font-size:13px;color:#667085;margin-top:14px">Enregistrez le modèle pour ajouter des photos.</div>' : photoManager(photos, vars, e)}
+    ${isNew ? '<div style="font-size:13px;color:#667085;margin-top:14px">Enregistrez le modèle pour ajouter des photos.</div>' : photoManager(photos, vars, e)}${isNew ? '' : (setSplitVars(vars), splitSection(vars))}
     </div><div class="bar" style="bottom:90px"><button class="btn" data-act="saveModel">Enregistrer</button></div>`;
 };
 handlers.togglePub = () => { S.edit.published = !S.edit.published; render(true); };
@@ -308,7 +309,8 @@ handlers.photoMove = (el) => once('photo', async () => {
 handlers.delPhoto = (el) => once('photo', async () => {
   const id = Number(el.dataset.v), row = must(await sb.from('model_photos').select('*').eq('id', id).single());
   must(await sb.from('model_photos').delete().eq('id', id));
-  const paths = [storagePath(row.url), storagePath(row.thumb_url)].filter(Boolean);
+  const used = (await sb.from('model_photos').select('id').eq('url', row.url).limit(1)).data || []; // même fichier encore utilisé par un modèle séparé ?
+  const paths = used.length ? [] : [storagePath(row.url), storagePath(row.thumb_url)].filter(Boolean);
   if (paths.length) await sb.storage.from('photos').remove(paths); // un échec ici ne bloque pas
   render(true);
 });
@@ -377,15 +379,17 @@ routes.plus = async () => `<div class="pad">${title('Plus', 'Gestion de la plate
 function impPreview() {
   const { models, errors } = parseStockBlock(S.imp.text);
   const total = models.reduce((t, m) => t + m.colors.reduce((a, c) => a + c.sizes.reduce((x, z) => x + z.qty, 0), 0), 0);
-  S.imp.ok = models.length > 0 && !errors.length;
+  const plan = planImport(models, S.imp.existing || []);
+  S.imp.ok = models.length > 0 && !errors.length && !plan.some((p) => p.action === 'error');
   if (!S.imp.text.trim()) return '';
   return `${errors.length ? `<div class="glass" style="padding:14px 16px;margin-top:14px;color:#B42318;font-size:13px;line-height:1.5">${errors.map((e) => `${e.line ? 'Ligne ' + e.line + ' : ' : ''}${esc(e.msg)}`).join('<br>')}</div>` : ''}
-    ${models.map((m) => `<div class="glass" style="padding:14px 16px;margin-top:12px"><div class="row"><b>${esc(m.name)}${m.category ? ` <span class="mono" style="font-size:10px">Marque ${esc(m.category)}</span>` : ''}</b><span style="font-size:13px">${m.price == null ? 'prix inchangé' : fcfa(m.price)}</span></div>${m.colors.map((c) => `<div class="row" style="justify-content:flex-start;align-items:flex-start;gap:10px;margin-top:8px"><i class="dot-c" style="background:${hex(c.hex || c.name)};margin-top:3px"></i><span style="font-size:13px"><b>${esc(c.name)}</b> : ${c.sizes.map((z) => z.size + (z.qty !== 1 ? '×' + z.qty : '')).join('  ')}</span></div>`).join('')}</div>`).join('')}
+    ${models.map((m, i) => `<div class="glass" style="padding:14px 16px;margin-top:12px"><div class="mono" style="margin-bottom:6px;color:${plan[i].action === 'error' ? '#B42318' : '#4A5160'}">${esc(plan[i].note)}</div><div class="row"><b>${esc(m.name)}${m.category ? ` <span class="mono" style="font-size:10px">Marque ${esc(m.category)}</span>` : ''}</b><span style="font-size:13px">${m.price == null ? 'prix inchangé' : fcfa(m.price)}</span></div>${m.colors.map((c) => `<div class="row" style="justify-content:flex-start;align-items:flex-start;gap:10px;margin-top:8px"><i class="dot-c" style="background:${hex(c.hex || c.name)};margin-top:3px"></i><span style="font-size:13px"><b>${esc(c.name)}</b> : ${c.sizes.map((z) => z.size + (z.qty !== 1 ? '×' + z.qty : '')).join('  ')}</span></div>`).join('')}</div>`).join('')}
     ${S.imp.ok ? `<div class="mono" style="margin-top:12px">${models.length} modèle(s) · ${models.reduce((t, m) => t + m.colors.reduce((a, c) => a + c.sizes.length, 0), 0)} variante(s) · ${total} paire(s)</div>` : ''}`;
 }
 routes.import = async () => {
   const bs = await boutiquesList();
   if (!S.imp) S.imp = { text: '', boutique: bs[0] ? bs[0].id : 1, mode: 'add', ok: false };
+  S.imp.existing = (await sb.from('models').select('id,name,price_fcfa')).data || [];
   const prev = impPreview();
   return `<div class="pad">${back('produits')}${title('Importer<br>du stock', 'Collez votre liste')}
     <div class="mono" style="margin-top:16px">Boutique qui reçoit ce stock</div>
@@ -409,7 +413,7 @@ handlers.impCreate = () => once('imp', async () => {
   const { models, errors } = parseStockBlock(S.imp.text);
   if (errors.length || !models.length) throw new Error('Corrigez les erreurs avant de créer.');
   const r = must(await sb.rpc('import_stock', { p_boutique: S.imp.boutique, p_mode: S.imp.mode, p_data: models }));
-  toast(`${r.models_created} modèle(s) créé(s) · ${r.variants_created} variante(s) · ${r.units} paire(s)`);
+  toast(`${r.models_created} modèle(s) créé(s)${r.models_separated ? ` (dont ${r.models_separated} séparé(s) par prix)` : ''} · ${r.variants_created} variante(s) · ${r.units} paire(s)`);
   await autoClassifyQuiet(); // nouveaux modèles : marque et catégorie déduites des noms
   S.imp.text = ''; go('/produits');
 });
