@@ -111,8 +111,7 @@ export const sortPhotos = (list) => (list || []).map((p, i) => [p, i]).sort((a, 
 export const photoIndexForColor = (photos, color) => (photos || []).findIndex((p) => p.color && strip(p.color) === strip(color));
 export function phFill(url, thumb, o = {}) {
   if (!url) return '';
-  const lz = o.eager ? 'eager' : 'lazy';
-  return `<img class="pf-bg" src="${esc(thumb || url)}" alt="" aria-hidden="true" loading="${lz}" decoding="async"><img class="pf-fg" src="${esc(url)}" alt="${esc(o.alt || '')}" loading="${lz}" decoding="async">`;
+  return `<img class="pf-fg" src="${esc(url)}" alt="${esc(o.alt || '')}" loading="${o.eager ? 'eager' : 'lazy'}" decoding="async">`;
 }
 
 // Bloc de texte -> modèles, couleurs, pointures et quantités

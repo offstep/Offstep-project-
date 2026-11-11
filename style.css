@@ -232,3 +232,52 @@ select.inp{appearance:auto;padding:0 12px}
 
 /* ===== CORRECTIF : la page doit défiler jusqu'au bout (plus de zone de défilement imbriquée) ===== */
 .app{overflow-x:clip}
+
+/* ===== Photos : elles REMPLISSENT le cadre (plus de bandes floues) ===== */
+.ph-fill .pf-fg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 38%}
+.hb-big .ph-fill{aspect-ratio:auto;display:block;min-height:0}
+.hb-big .pf-fg{position:static;height:auto;max-height:min(70vh,560px);min-height:240px;object-fit:cover}
+.slide .ph{aspect-ratio:4/5}
+
+/* ===== Blocs animés ===== */
+.js-anim .hb[data-anim]{opacity:0;transition:opacity .8s ease,transform .8s cubic-bezier(.2,.7,.2,1)}
+.js-anim .hb[data-anim="slide"]{transform:translateY(32px)}
+.js-anim .hb[data-anim="zoom"]{transform:scale(.92)}
+.js-anim .hb[data-anim].in{opacity:1;transform:none}
+.mq{display:block;overflow:hidden;border-radius:24px;background:#0A0C14;color:#fff;padding:15px 0;-webkit-mask-image:linear-gradient(90deg,transparent,#000 7%,#000 93%,transparent);mask-image:linear-gradient(90deg,transparent,#000 7%,#000 93%,transparent)}
+.mq-t{display:flex;width:max-content;animation:mq var(--d,20s) linear infinite}
+.mq-in{display:flex;align-items:center;flex:none;gap:26px;padding-right:26px;font-size:15px;font-weight:600;white-space:nowrap}
+.mq-in i{font-style:normal;color:var(--aq1);font-size:12px}
+@keyframes mq{to{transform:translateX(-50%)}}
+.cd{position:relative;overflow:hidden;border-radius:28px;padding:22px 14px 18px;background:radial-gradient(120% 140% at 0% 0%,#1B2A4A,#0A0C14 62%);color:#fff;text-align:center}
+.cd::before{content:"";position:absolute;left:-20%;right:-20%;top:-45%;height:80%;background:radial-gradient(closest-side,rgba(124,196,255,.35),transparent);pointer-events:none}
+.cd-link{display:block;color:inherit}
+.cd-t{position:relative;font-size:19px;font-weight:700;letter-spacing:-.5px;margin-bottom:14px}
+.cd-g{position:relative;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.cd-g[hidden]{display:none}
+.cd-u{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);border-radius:18px;padding:12px 0 8px}
+.cd-u b{display:block;font-size:30px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-1px}
+.cd-u span{font:500 9px 'JetBrains Mono',monospace;letter-spacing:1.4px;text-transform:uppercase;opacity:.7}
+.cd-u b.tick{animation:cdt .45s ease-out}
+@keyframes cdt{0%{transform:translateY(-6px);opacity:.4}100%{transform:none;opacity:1}}
+.cd-after{position:relative;font-size:16px;font-weight:600}
+.cd-after[hidden]{display:none}
+.cf{display:flex;gap:4px;overflow-x:auto;scroll-snap-type:x mandatory;margin:0 -20px;padding:10px 20% 28px;scrollbar-width:none}
+.cf::-webkit-scrollbar{display:none}
+.cf .hcard{flex:0 0 60%;scroll-snap-align:center;will-change:transform}
+.cnt-g{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.cnt{border-radius:24px;padding:20px 12px;background:#0A0C14;color:#fff;text-align:center;min-width:0}
+.cnt b{display:block;font-size:36px;font-weight:700;letter-spacing:-1.4px;font-variant-numeric:tabular-nums;background:var(--aqg);-webkit-background-clip:text;background-clip:text;color:transparent}
+.cnt span{display:block;margin-top:6px;font-size:13px;opacity:.85}
+.hb-par{position:relative;display:block;height:360px;border-radius:28px;overflow:hidden;color:#fff}
+.par-img{position:absolute;inset:0;overflow:hidden}
+.par-img img{position:absolute;left:0;top:-14%;width:100%;height:128%;object-fit:cover;will-change:transform}
+@media (prefers-reduced-motion:reduce){.mq{overflow-x:auto;-webkit-mask-image:none;mask-image:none}.mq-in[aria-hidden="true"]{display:none}}
+
+/* ===== LOGO : en-tête noir avec le logo OFFSTEP ===== */
+.hdr{box-sizing:border-box;background:#000;color:#fff;height:calc(68px + env(safe-area-inset-top,0px));padding-top:env(safe-area-inset-top,0px);border-radius:0 0 28px 28px;position:relative;z-index:6;box-shadow:0 18px 34px -22px rgba(10,12,20,.7)}
+.hdr .logo{display:flex;align-items:center;padding:0;letter-spacing:0}
+.hdr .logo img{display:block;height:26px;width:auto}
+.hdr .ib{color:#fff}
+.hdr .cbadge{background:#fff;color:#000}
+.hdr .pill{display:inline-flex;align-items:center;height:30px;padding:0 12px;margin-left:10px;border:1px solid rgba(255,255,255,.4);border-radius:999px;font:500 10px 'JetBrains Mono',monospace;letter-spacing:1.6px;text-transform:uppercase;color:#fff}

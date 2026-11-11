@@ -2,7 +2,7 @@
 self.addEventListener('push', (e) => {
   let d = {};
   try { d = e.data ? e.data.json() : {}; } catch { d = { title: 'OFFSTEP', body: e.data ? e.data.text() : '' }; }
-  e.waitUntil(self.registration.showNotification(d.title || 'OFFSTEP', { body: d.body || '', tag: d.tag, data: { url: /^#\/[\w\/-]*$/.test(d.url || '') ? d.url : '#/accueil' } }));
+  e.waitUntil(self.registration.showNotification(d.title || 'OFFSTEP', { body: d.body || '', icon: self.registration.scope + 'icon-192.png', tag: d.tag, data: { url: /^#\/[\w\/-]*$/.test(d.url || '') ? d.url : '#/accueil' } }));
 });
 self.addEventListener('notificationclick', (e) => {
   e.notification.close();

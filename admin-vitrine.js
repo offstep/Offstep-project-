@@ -1,7 +1,8 @@
 // Lot D · Éditeur « Vitrine » : composer l'accueil des revendeurs (#/vitrine). Droit « produits » requis pour modifier.
 import { sb, S, routes, handlers, go, render, toast, once } from './core.js';
 import { esc, strip, uniqueBrands, phFill } from './lib.js';
-import { KINDS, KIND_ORDER, renderBlock, makeCtx, validateBlock } from './home-blocks.js';
+import { KINDS, KIND_ORDER, ANIMS, renderBlock, makeCtx, validateBlock } from './home-blocks.js';
+import './home-anim.js'; // l'aperçu s'anime comme chez les revendeurs
 import { shrink } from './img-shrink.js';
 
 const must = (r) => { if (r.error) throw r.error; return r.data; };
@@ -20,18 +21,26 @@ const slide0 = () => ({ image: '', title: '', subtitle: '', cta: 'Explorer', tar
 const tile0 = () => ({ image: '', caption: '', target: tgt0() });
 const pad2 = (n) => String(n).padStart(2, '0');
 const toLocal = (iso) => { if (!iso) return ''; const d = new Date(iso); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`; };
-const blank = (kind) => ({ kind, title: KINDS[kind][0], active: true, startsL: '', endsL: '', payload: {
+const stat0 = () => ({ value: '', suffix: '', label: '' });
+const blank = (kind) => ({ kind, title: KINDS[kind][0], active: true, startsL: '', endsL: '', payload: { anim: '', ...{
   diaporama: { slides: [slide0()] }, image_produits: { image: '', subtitle: '', target: tgt0(), models: [] }, produits: { target: tgt0(), models: [] },
-  nouveautes: { count: 8 }, marques: { brands: [] }, bandeau: { text: '', color: '#7CC4FF', target: tgt0() }, grille_images: { tiles: [tile0(), tile0()] } }[kind] });
+  nouveautes: { count: 8 }, marques: { brands: [] }, bandeau: { text: '', color: '#7CC4FF', target: tgt0() }, grille_images: { tiles: [tile0(), tile0()] },
+  defilement: { items: [''], speed: 'normal', target: tgt0() }, compte_rebours: { ends_local: '', ends_at: '', text_after: '', target: tgt0() },
+  coverflow: { target: tgt0(), models: [] }, compteurs: { stats: [stat0(), stat0()] }, parallaxe: { image: '', subtitle: '', target: tgt0() } }[kind] } });
 const fix = (b) => {
   const p = b.payload = b.payload || {}, T = (t) => ({ ...tgt0(), ...(t || {}) });
+  p.anim = p.anim || '';
   if (b.kind === 'diaporama') p.slides = (p.slides || []).map((s) => ({ ...slide0(), ...s, target: T(s.target) }));
   if (b.kind === 'grille_images') p.tiles = (p.tiles || []).map((s) => ({ ...tile0(), ...s, target: T(s.target) }));
-  if (['image_produits', 'produits', 'bandeau'].includes(b.kind)) p.target = T(p.target);
-  if (['image_produits', 'produits'].includes(b.kind)) p.models = (p.models || []).map(Number);
+  if (['image_produits', 'produits', 'bandeau', 'coverflow', 'defilement', 'compte_rebours', 'parallaxe'].includes(b.kind)) p.target = T(p.target);
+  if (['image_produits', 'produits', 'coverflow'].includes(b.kind)) p.models = (p.models || []).map(Number);
   if (b.kind === 'marques') p.brands = p.brands || [];
+  if (b.kind === 'defilement') { p.items = Array.isArray(p.items) && p.items.length ? p.items : ['']; p.speed = p.speed || 'normal'; }
+  if (b.kind === 'compte_rebours') { p.ends_local = toLocal(p.ends_at); p.text_after = p.text_after || ''; }
+  if (b.kind === 'compteurs') p.stats = (p.stats || []).map((x) => ({ ...stat0(), ...x }));
   return b;
 };
+const syncDerived = () => { const b = S.vb; if (b && b.kind === 'compte_rebours') b.payload.ends_at = b.payload.ends_local ? new Date(b.payload.ends_local).toISOString() : ''; };
 
 // ───────── Liste, ajout
 async function list() {
@@ -82,10 +91,17 @@ async function editor() {
     marques: () => `<div class="mono" style="margin-top:14px">Marques affichées (aucune = toutes)</div><div class="glass" style="padding:4px 14px;margin-top:8px">${brands.map((x) => `<label class="pk"><input type="checkbox" data-change-act="vbBrand" data-v="${esc(x)}" ${p.brands.includes(x) ? 'checked' : ''}><span style="flex:1">${esc(x)}</span></label>`).join('') || '<div class="pk">Aucune marque pour le moment.</div>'}</div>`,
     bandeau: () => `${F('payload.text', 'Texte (140 caractères au plus)', 'maxlength="140"')}<label class="mono" for="f_color">Couleur d’accentuation</label><input class="inp" id="f_color" type="color" value="${esc(p.color || '#7CC4FF')}" style="padding:4px" data-bind="vb.payload.color" data-input-act="vbPreview">${T('payload.target')}`,
     grille_images: () => p.tiles.map((s, i) => `<div class="glass" style="padding:14px;margin-top:12px"><div class="row"><b>Image ${i + 1}</b>${rm('tiles', i, 2)}</div>${IMG(`payload.tiles.${i}.image`)}${F(`payload.tiles.${i}.caption`, 'Légende')}${T(`payload.tiles.${i}.target`)}</div>`).join('') + add('tiles', 4, 'Ajouter une image'),
+    defilement: () => p.items.map((_, i) => `<div class="row" style="gap:8px;align-items:flex-end"><div style="flex:1;min-width:0">${F(`payload.items.${i}`, `Texte ${i + 1}`, 'maxlength="60"')}</div>${p.items.length > 1 ? `<button class="chip" data-act="vbRemove" data-list="items" data-i="${i}">Retirer</button>` : ''}</div>`).join('') + add('items', 8, 'Ajouter un texte')
+      + `<label class="mono" for="f_speed">Vitesse</label><select class="inp" id="f_speed" data-bind="vb.payload.speed" data-change-act="vbPreview">${[['lent', 'Lente'], ['normal', 'Normale'], ['rapide', 'Rapide']].map(([v, l]) => opt(v, l, p.speed)).join('')}</select>${T('payload.target')}`,
+    compte_rebours: () => `<label class="mono" for="f_ends">Date et heure de fin</label><input class="inp" id="f_ends" type="datetime-local" value="${esc(p.ends_local)}" data-bind="vb.payload.ends_local" data-change-act="vbPreview">${F('payload.text_after', 'Message à la fin (facultatif, sinon le bloc disparaît)', 'maxlength="140"')}${T('payload.target')}`,
+    coverflow: () => `${T('payload.target')}<div class="mono" style="margin-top:6px;text-transform:none;letter-spacing:0">Le lien sert au bouton « Voir tout ».</div>${PICK('payload.models')}`,
+    compteurs: () => p.stats.map((x, i) => `<div class="glass" style="padding:14px;margin-top:12px"><div class="row"><b>Compteur ${i + 1}</b>${rm('stats', i, 2)}</div>${F(`payload.stats.${i}.value`, 'Nombre', 'type="number" inputmode="numeric" min="0"')}${F(`payload.stats.${i}.suffix`, 'Après le nombre (ex. +)', 'maxlength="6"')}${F(`payload.stats.${i}.label`, 'Texte (ex. modèles en stock)', 'maxlength="40"')}</div>`).join('') + add('stats', 4, 'Ajouter un compteur'),
+    parallaxe: () => `${IMG('payload.image')}${F('payload.subtitle', 'Sous-titre')}${T('payload.target')}`,
   }[b.kind]();
   return `<div class="pad">${back('vitrine')}<div class="mono">${esc(KINDS[b.kind][0])}</div><h1 class="h1" style="font-size:30px;margin-top:6px">${b.id ? 'Modifier le bloc' : 'Nouveau bloc'}</h1>
     ${F('title', 'Titre du bloc', 'maxlength="80"')}
     <div class="glass" style="margin-top:14px;padding:0 18px;display:flex;align-items:center;justify-content:space-between;min-height:64px"><div><div class="t1">Actif</div><div class="t2">Visible par les revendeurs</div></div><button class="chip" aria-pressed="${b.active}" data-act="vbActive">${b.active ? 'Oui' : 'Non'}</button></div>
+    <label class="mono" for="f_anim">Animation d’apparition</label><select class="inp" id="f_anim" data-bind="vb.payload.anim" data-change-act="vbPreview">${ANIMS.map(([v, l]) => opt(v, l, p.anim || '')).join('')}</select>
     ${body}
     <div class="sec">Programmation (facultative)</div>
     <label class="mono" for="f_startsL">Début</label><input class="inp" id="f_startsL" type="datetime-local" value="${esc(b.startsL)}" data-bind="vb.startsL">
@@ -107,12 +123,12 @@ routes.vitrine = async (a, b) => {
 
 // ───────── Actions
 const rpc = async (name, args) => { const r = await sb.rpc(name, args); if (r.error) throw r.error; return r.data; };
-const preview = () => { const el = document.getElementById('vbPrev'); if (el && S.vb && S.vbCtx) el.innerHTML = renderBlock(S.vb, S.vbCtx) || '<div class="glass" style="padding:16px;font-size:14px">L’aperçu apparaît quand le bloc est complet.</div>'; };
+const preview = () => { syncDerived(); const el = document.getElementById('vbPrev'); if (el && S.vb && S.vbCtx) el.innerHTML = renderBlock(S.vb, S.vbCtx) || '<div class="glass" style="padding:16px;font-size:14px">L’aperçu apparaît quand le bloc est complet.</div>'; };
 handlers.vbPreview = preview;
 handlers.vbRerender = () => render(true);
 handlers.vbActive = () => { S.vb.active = !S.vb.active; render(true); };
 handlers.vbCancel = () => { S.vb = null; go('/vitrine'); };
-handlers.vbAdd = (el) => { const l = el.dataset.list; S.vb.payload[l].push(l === 'slides' ? slide0() : tile0()); render(true); };
+handlers.vbAdd = (el) => { const l = el.dataset.list; S.vb.payload[l].push(l === 'slides' ? slide0() : l === 'tiles' ? tile0() : l === 'stats' ? stat0() : ''); render(true); };
 handlers.vbRemove = (el) => { S.vb.payload[el.dataset.list].splice(Number(el.dataset.i), 1); render(true); };
 handlers.vbSearch = (el) => { const q = strip(el.value); document.querySelectorAll('.pk[data-n]').forEach((r) => { r.hidden = !!q && !r.dataset.n.includes(q); }); };
 handlers.vbModel = (el) => {
@@ -138,7 +154,11 @@ handlers.vbUpload = (el) => once('vbup', async () => {
 handlers.vbSave = () => once('vb', async () => {
   const b = S.vb; if (!b) return;
   const p = JSON.parse(JSON.stringify(b.payload));
+  syncDerived();
   if (b.kind === 'nouveautes') p.count = Number(p.count);
+  if (b.kind === 'compte_rebours') { p.ends_at = b.payload.ends_at; delete p.ends_local; }
+  if (b.kind === 'compteurs') p.stats = p.stats.map((x) => ({ value: x.value === '' ? NaN : Number(x.value), suffix: x.suffix || '', label: (x.label || '').trim() }));
+  if (b.kind === 'defilement') p.items = p.items.map((x) => String(x || '').trim());
   const out = { id: b.id, kind: b.kind, title: (b.title || '').trim(), payload: p, active: b.active, starts_at: b.startsL ? new Date(b.startsL).toISOString() : null, ends_at: b.endsL ? new Date(b.endsL).toISOString() : null };
   const err = validateBlock(out);
   if (err) { toast(err); return; }

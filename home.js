@@ -3,6 +3,7 @@ import { S, routes, handlers, view, render, NAVCONF, sb } from './core.js';
 import { ensureCatalogue } from './shop.js';
 import { esc } from './lib.js';
 import { renderBlock, makeCtx, FALLBACK, skeleton } from './home-blocks.js';
+import './home-anim.js';
 
 // L'accueil devient la page d'arrivée et entre dans la barre ; le panier est passé dans l'en-tête
 NAVCONF.home = 'accueil';
