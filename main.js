@@ -5,6 +5,8 @@ import './checkout.js';
 import './account.js';
 import './photos.js';
 import './home.js';
+import './notifications.js';
+import './product-gallery.js';
 
 // Le catalogue se met à jour tout seul : toutes les 30 secondes et au retour sur l'application
 const LIVE = ['accueil', 'catalogue', 'produit', 'photos'];

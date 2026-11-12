@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<title>Créer un compte · OFFSTEP</title>
+<link rel="icon" href="./icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<div class="app">
+  <header class="hdr"><span class="hdr-s"></span><a class="logo" href="./index.html" aria-label="OFFSTEP"><img src="./logo.png" alt="OFFSTEP" width="153" height="26"></a><div class="hdr-r"></div></header>
+  <main class="pad" id="main">
+    <div class="mono" style="margin-top:8px">Nouveau revendeur</div>
+    <h1 class="h1" style="margin-top:6px">Créer<br>un compte</h1>
+    <p style="color:#4A5160;font-size:14px;line-height:1.5;margin:12px 0 0">Laissez-nous vos coordonnées : nous vous contactons pour ouvrir votre accès.</p>
+    <form id="f" novalidate autocomplete="on" style="margin-top:10px">
+      <label class="mono" for="nom" style="display:block;margin-top:18px">Nom</label>
+      <input class="inp" id="nom" name="family-name" autocomplete="family-name" maxlength="60" required>
+      <div class="err" id="e_nom" role="alert"></div>
+      <label class="mono" for="prenom" style="display:block;margin-top:14px">Prénom</label>
+      <input class="inp" id="prenom" name="given-name" autocomplete="given-name" maxlength="60" required>
+      <div class="err" id="e_prenom" role="alert"></div>
+      <label class="mono" for="phone" style="display:block;margin-top:14px">Numéro de téléphone</label>
+      <input class="inp" id="phone" name="tel" type="tel" inputmode="tel" autocomplete="tel" placeholder="Ex. 01 02 03 04 05" maxlength="24" required>
+      <div class="err" id="e_phone" role="alert"></div>
+      <input id="site" name="site" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px;opacity:0;height:0;width:0">
+      <div class="err" id="e_form" role="alert" style="margin-top:12px"></div>
+      <button class="btn" id="go" type="submit" style="width:100%;margin-top:18px">Envoyer ma demande</button>
+    </form>
+    <div id="ok" class="glass" hidden style="padding:22px;margin-top:22px;text-align:center">
+      <div style="font-size:22px;font-weight:700;letter-spacing:-.6px">Merci !</div>
+      <p style="color:#4A5160;font-size:14px;line-height:1.5;margin:10px 0 0">Votre demande est bien reçue. Nous vous contactons très vite sur le numéro indiqué.</p>
+      <a class="btn2" style="display:flex;align-items:center;justify-content:center;margin-top:16px" href="./index.html">Retour</a>
+    </div>
+    <p style="margin-top:22px;font-size:13px;color:#667085;text-align:center">Vous avez déjà un compte ? <a href="./index.html" style="color:#0A0C14;font-weight:600">Se connecter</a></p>
+  </main>
+</div>
+<style>.err{color:#B42318;font-size:13px;margin-top:6px;min-height:0}.err:empty{display:none}.inp[aria-invalid="true"]{border-color:#B42318}</style>
+<script type="module">
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
+import { validateSignup, friendlyError } from './lib.js';
+const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
+const $ = (id) => document.getElementById(id);
+let busy = false;
+$('f').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (busy) return;
+  const v = validateSignup({ nom: $('nom').value, prenom: $('prenom').value, phone: $('phone').value });
+  for (const k of ['nom', 'prenom', 'phone']) { $('e_' + k).textContent = v.errors[k] || ''; $(k).setAttribute('aria-invalid', v.errors[k] ? 'true' : 'false'); }
+  $('e_form').textContent = '';
+  if (!v.ok) { const first = ['nom', 'prenom', 'phone'].find((k) => v.errors[k]); $(first).focus(); return; }
+  if ($('site').value) { $('f').hidden = true; $('ok').hidden = false; return; } // champ piège rempli par les robots : on ne fait rien
+  busy = true; $('go').disabled = true; $('go').textContent = 'Envoi…';
+  try {
+    const r = await sb.rpc('request_signup', { p_nom: v.nom, p_prenom: v.prenom, p_phone: v.phone });
+    if (r.error) throw r.error;
+    $('f').hidden = true; $('ok').hidden = false; window.scrollTo({ top: 0 });
+  } catch (err) {
+    $('e_form').textContent = friendlyError(err && err.message ? err.message : String(err));
+    busy = false; $('go').disabled = false; $('go').textContent = 'Envoyer ma demande';
+  }
+});
+</script>
+</body>
+</html>

@@ -64,25 +64,33 @@ routes.produit = async (id) => {
   if (fresh) start = Math.max(0, photoIndexForColor(gal, S.sel.color));
   if (S.galGo != null) { start = S.galFrom || 0; go = S.galGo; S.galGo = S.galFrom = null; }
   start = Math.min(start, Math.max(0, gal.length - 1));
+  const r0 = (window.__pgr || {})[id] || 0.8; // format déjà connu de ce modèle : pas de saut de mise en page
   const galHtml = gal.length
-    ? `<div class="gal-wrap"><div class="gal" data-start="${start}" data-go="${go}">${gal.map((p, i) => `<figure class="slide" data-i="${i}"><div class="ph ph-fill" style="aspect-ratio:4/5">${phFill(p.url, p.thumb_url, { eager: i === start, alt: m.name + ' · photo ' + (i + 1) })}</div></figure>`).join('')}</div>${gal.length > 1 ? `<button class="gal-arrow prev" data-gal="-1" aria-label="Photo précédente">‹</button><button class="gal-arrow next" data-gal="1" aria-label="Photo suivante">›</button><div class="dots" aria-hidden="true">${gal.map(() => '<i></i>').join('')}</div>` : ''}</div>`
+    ? `<div class="pgw"><div class="pg" data-m="${id}" data-start="${start}" data-go="${go}" style="--r:${r0}"><div class="pg-track">${gal.map((p, i) => `<figure class="pg-s" data-i="${i}"><img src="${esc(p.url)}" alt="${esc(m.name)} · photo ${i + 1}" loading="${i === start ? 'eager' : 'lazy'}" decoding="async"${i === start ? ' fetchpriority="high"' : ''}></figure>`).join('')}</div>${gal.length > 1 ? `<div class="pg-count">${start + 1} / ${gal.length}</div><button class="pg-arrow prev" data-pg="-1" aria-label="Photo précédente">‹</button><button class="pg-arrow next" data-pg="1" aria-label="Photo suivante">›</button>` : ''}</div>${gal.length > 1 ? `<div class="pg-thumbs" role="group" aria-label="Miniatures">${gal.map((p, i) => `<button class="pg-t${i === start ? ' on' : ''}" type="button" aria-label="Photo ${i + 1}"><img src="${esc(p.thumb_url || p.url)}" alt="" loading="lazy" decoding="async"></button>`).join('')}</div>` : ''}</div>`
     : phBox(null, 'aspect-ratio:4/5;border-radius:28px');
   const sizes = sizesOf(id, S.sel.color);
   if (!sizes.includes(S.sel.size)) S.sel.size = sizes[0] || null;
+  const link = (c.links || []).find((x) => x.model_id === id), line = link && (c.cats || []).find((y) => y.id === link.category_id);
+  const tags = [m.category, line && line.name].filter(Boolean).map((t) => `<span class="pi-tag">${esc(t)}</span>`).join('');
+  const same = c.models.filter((x) => x.model_id !== id && brandKey(m.category) && brandKey(x.category) === brandKey(m.category));
+  const more = (same.length >= 2 ? same : c.models.filter((x) => x.model_id !== id)).slice(0, 8);
   return `<div class="pad">
-    <a href="#/catalogue" class="back" style="position:static;margin-bottom:8px" aria-label="Retour">‹</a>
+    <a href="#/catalogue" class="back" style="position:static;margin-bottom:10px" aria-label="Retour">‹</a>
     ${galHtml}
-    <div class="row" style="align-items:flex-start;margin-top:16px"><div><div style="font-size:24px;font-weight:600;letter-spacing:-.5px">${esc(m.name)}</div><div class="mono" style="margin-top:6px">Réf. ${esc(m.ref || '—')}</div></div><b style="font-size:17px;margin-top:4px">${fcfa(m.price_fcfa)}</b></div>
-    ${m.description ? `<p style="color:#3B4150;font-size:14px;line-height:1.5">${esc(m.description)}</p>` : ''}
+    ${tags ? `<div class="pi-tags">${tags}</div>` : ''}
+    <div class="pi-h"><div style="min-width:0"><div class="pi-n">${esc(m.name)}</div>${m.ref ? `<div class="mono" style="margin-top:6px">Réf. ${esc(m.ref)}</div>` : ''}</div><div class="pi-p">${fcfa(m.price_fcfa)}</div></div>
+    ${m.description ? `<p class="pi-d">${esc(m.description)}</p>` : ''}
     ${colorsOf(id).length ? '' : '<div class="glass" style="padding:14px 16px;margin-top:18px;font-size:14px">Les couleurs et pointures de ce modèle ne sont pas encore disponibles.</div>'}
-    <div class="mono" style="margin-top:18px">Couleur · ${esc(S.sel.color)}</div>
+    <div class="pi-l">Couleur <b>${esc(S.sel.color || '')}</b></div>
     <div class="chips" style="flex-wrap:wrap">${colorsOf(id).map((col) => `<button class="chip" aria-pressed="${col === S.sel.color}" data-act="selColor" data-v="${esc(col)}">${esc(col)}</button>`).join('')}</div>
-    <div class="mono" style="margin-top:14px">Pointure · ${esc(S.sel.size ?? '—')}</div>
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:10px">${sizes.map((s) => `<button class="chip big" aria-pressed="${s === S.sel.size}" data-act="selSize" data-v="${s}">${s}</button>`).join('')}</div>
-    <div class="row" style="margin-top:16px"><span class="mono">Quantité</span>${stepper('selQtyDec', 'selQtyInc', S.sel.qty)}</div>
+    <div class="pi-l">Pointure <b>${esc(S.sel.size ?? '')}</b></div>
+    <div class="pi-sz">${sizes.map((s) => `<button class="chip big" aria-pressed="${s === S.sel.size}" data-act="selSize" data-v="${s}">${s}</button>`).join('')}</div>
+    <div class="row" style="margin-top:18px"><span class="pi-l" style="margin:0">Quantité</span>${stepper('selQtyDec', 'selQtyInc', S.sel.qty)}</div>
+    ${more.length ? `<div class="hsec" style="margin-top:30px"><h2>${same.length >= 2 ? 'Plus ' + esc(m.category) : 'Autres modèles'}</h2></div><div class="hrow">${more.map((x) => `<a class="glass card hcard" href="#/produit/${x.model_id}">${phBox(pickPhoto(x.model_id, colorsOf(x.model_id)[0]), 'aspect-ratio:4/5;border-radius:18px', x.name)}<b class="hn">${esc(x.name)}</b><div class="hpx">${fcfa(x.price_fcfa)}</div></a>`).join('')}</div>` : ''}
     </div>
     <div class="bar glass" style="bottom:90px;padding:10px;border-radius:30px;display:flex;align-items:center;gap:14px"><div style="padding-left:12px"><div class="mono">Total</div><b>${fcfa(m.price_fcfa * S.sel.qty)}</b></div><button class="btn" style="flex:1" data-act="addToCart">Ajouter au panier</button></div>`;
 };
+
 handlers.selColor = (el) => {
   const from = Number(document.documentElement.dataset.galIdx) || 0;
   S.sel.color = el.dataset.v; S.sel.size = null;

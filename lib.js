@@ -231,3 +231,25 @@ export function planImport(models, existing) {
     return { action: 'error', note: 'Prix requis pour un nouveau modèle' };
   });
 }
+
+
+// ───────── Fiche produit : cadre de la galerie d'après les photos (médiane des formats, limitée)
+// ratios = largeur/hauteur de chaque photo (0 tant qu'elle n'est pas chargée) → { r, fits }
+export function galleryFrame(ratios) {
+  const vals = (ratios || []).filter((x) => x > 0).sort((a, b) => a - b);
+  if (!vals.length) return { r: 0.8, fits: (ratios || []).map(() => false) };
+  const r = Math.max(0.75, Math.min(1.2, vals[Math.floor(vals.length / 2)]));
+  return { r, fits: (ratios || []).map((q) => (q > 0 ? q / r < 0.8 || q / r > 1.25 : false)) };
+}
+
+// ───────── Inscription : nom, prénom, numéro
+export function validateSignup(f) {
+  const nom = String((f && f.nom) || '').trim().replace(/\s+/g, ' '), prenom = String((f && f.prenom) || '').trim().replace(/\s+/g, ' ');
+  let phone = String((f && f.phone) || '').replace(/[^0-9]/g, '');
+  if (phone.startsWith('00')) phone = phone.slice(2);
+  const errors = {};
+  if (!nom || nom.length > 60 || /[<>"`]/.test(nom)) errors.nom = 'Indiquez votre nom.';
+  if (!prenom || prenom.length > 60 || /[<>"`]/.test(prenom)) errors.prenom = 'Indiquez votre prénom.';
+  if (phone.length < 8 || phone.length > 15) errors.phone = 'Indiquez un numéro valide (8 à 15 chiffres).';
+  return { ok: !Object.keys(errors).length, errors, nom, prenom, phone };
+}
