@@ -7,6 +7,7 @@ import './photos.js';
 import './home.js';
 import './notifications.js';
 import './product-gallery.js';
+import './profile-gate.js'; // en dernier : il protège toutes les pages déjà enregistrées
 
 // Le catalogue se met à jour tout seul : toutes les 30 secondes et au retour sur l'application
 const LIVE = ['accueil', 'catalogue', 'produit', 'photos'];

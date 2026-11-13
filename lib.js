@@ -60,6 +60,7 @@ export function friendlyError(msg) {
   if (m.includes('Commande déjà partie')) return 'Cette commande est déjà partie : contactez OFFSTEP.';
   if (m.includes('Commande non annulable')) return "Cette commande ne peut plus être annulée.";
   if (m.includes('bêta')) return "La bêta n'est pas ouverte.";
+  if (m.includes('Complétez vos informations')) return 'Complétez vos informations (nom, prénom, numéro) pour commander.';
   if (m.includes('Invalid login credentials')) return 'E-mail ou mot de passe incorrect.';
   if (m.includes('Email not confirmed') || m.includes('E-mail non confirmé')) return "Confirmez d'abord votre e-mail (lien reçu par message).";
   if (m.includes('User already registered')) return 'Cet e-mail a déjà un compte. Connectez-vous.';
@@ -161,14 +162,14 @@ export function parseStockBlock(text) {
 // cat = { models, variants, photos } ; q = { brand?, size, color }
 export function searchPhotos(cat, q) {
   const { models = [], variants = [], photos = [] } = cat || {};
-  const size = Number(q.size), ck = strip(q.color), bk = brandKey(q.brand);
+  const size = Number(q.size), ck = strip(q.color), anyColor = !ck, bk = brandKey(q.brand);
   const vmap = new Map();
   for (const v of variants) { const l = vmap.get(v.model_id) || []; l.push({ color: v.color, size: Number(v.size) }); vmap.set(v.model_id, l); }
   const pmap = new Map();
   for (const p of sortPhotos(photos)) { const l = pmap.get(p.model_id) || []; l.push(p); pmap.set(p.model_id, l); }
-  const colorLabel = ((variants.find((v) => strip(v.color) === ck) || {}).color || String(q.color || '')).trim();
+  const colorLabel = anyColor ? '' : ((variants.find((v) => strip(v.color) === ck) || {}).color || String(q.color || '')).trim();
   const item = (m) => {
-    const all = pmap.get(m.model_id) || [], byColor = all.filter((p) => p.color && strip(p.color) === ck), general = all.filter((p) => !p.color);
+    const all = pmap.get(m.model_id) || [], byColor = anyColor ? [] : all.filter((p) => p.color && strip(p.color) === ck), general = all.filter((p) => !p.color);
     const gallery = byColor.length ? byColor : general.length ? general : all;
     return { model: m, gallery, cover: gallery[0] || null, rank: byColor.length ? 0 : all.length ? 1 : 2 };
   };
@@ -176,15 +177,16 @@ export function searchPhotos(cat, q) {
   const exact = [], brands = [], sizes = [];
   for (const m of models) {
     const vs = vmap.get(m.model_id) || [];
-    const hasColor = vs.some((v) => strip(v.color) === ck), hasBoth = hasColor && vs.some((v) => strip(v.color) === ck && v.size === size);
+    const hasColor = anyColor ? vs.length > 0 : vs.some((v) => strip(v.color) === ck);
+    const hasBoth = hasColor && vs.some((v) => v.size === size && (anyColor || strip(v.color) === ck));
     const brandOk = !bk || brandKey(m.category) === bk;
     if (hasBoth && brandOk) exact.push(item(m));
     else if (hasBoth && bk) brands.push(item(m));
-    else if (hasColor && brandOk) sizes.push(item(m));
+    else if (hasColor && brandOk && (bk || !anyColor)) sizes.push(item(m)); // ni marque ni couleur : on ne propose pas tout le catalogue
   }
-  const groups = [];
-  if (exact.length) groups.push({ id: 'exact', title: `Pointure ${size} en ${colorLabel}`, items: exact.sort(order) });
-  if (brands.length) groups.push({ id: 'brands', title: `D'autres marques en ${colorLabel}, pointure ${size}`, items: brands.sort(order) });
+  const groups = [], tail = colorLabel ? ` en ${colorLabel}` : '';
+  if (exact.length) groups.push({ id: 'exact', title: `Pointure ${size}${tail}`, items: exact.sort(order) });
+  if (brands.length) groups.push({ id: 'brands', title: colorLabel ? `D'autres marques en ${colorLabel}, pointure ${size}` : `D'autres marques, pointure ${size}`, items: brands.sort(order) });
   if (!exact.length && !brands.length && sizes.length) groups.push({ id: 'sizes', title: "Ce modèle existe en d'autres pointures", items: sizes.sort(order) });
   return { colorLabel, groups };
 }

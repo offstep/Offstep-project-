@@ -77,7 +77,8 @@ routes.compte = async () => {
     <div class="sec">Ma formule</div>
     <div class="glass" style="padding:18px"><div style="font-size:17px;font-weight:600">${esc(planLabel(S.sub))}</div>${S.credit ? `<div style="font-size:13px;color:#667085;margin-top:6px">Crédit de frais : ${fcfa(S.credit)} sur votre prochaine commande.</div>` : ''}<a class="btn" style="margin-top:14px;display:flex;align-items:center;justify-content:center" href="#/formule">${S.sub ? 'Changer de formule' : 'Choisir ma formule'}</a></div>
     ${(pays || []).length ? `<div class="sec">Paiements d’abonnement</div><div class="glass" style="padding:6px 18px">${pays.map((x) => `<div class="kv"><span>${fcfa(x.amount_expected)}</span><b>${esc(label('paiement', x.status))}</b></div>`).join('')}</div>` : ''}
-    <button class="btn2" style="margin-top:26px" data-act="logout">Se déconnecter</button></div>`;
+    <a class="btn2" style="margin-top:26px;display:flex;align-items:center;justify-content:center" href="#/profil">Modifier mes informations</a>
+    <button class="btn2" style="margin-top:12px" data-act="logout">Se déconnecter</button></div>`;
 };
 
 routes.formule = async () => {
